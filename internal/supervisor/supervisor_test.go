@@ -30,12 +30,15 @@ func TestHelperChild(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 		os.Exit(1)
 	case "marker":
+		// 先注册信号处理，再写 start：如果在“写 start”和“注册信号”之间收到
+		// SIGTERM，进程会按默认动作直接退出，留下一个永远等不到 end 的 start，
+		// 从而让父进程的“子进程不重叠”断言假阳性失败。
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
 		if err := appendMarker("start"); err != nil {
 			os.Exit(4)
 		}
 		// Give the manager a chance to ask us to stop gracefully.
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
 		select {
 		case <-ch:
 			_ = appendMarker("end")
@@ -291,6 +294,26 @@ func TestConcurrentOpsNeverOverlapChildren(t *testing.T) {
 		defer cancel()
 		_ = m.Close(ctx)
 	}()
+
+	// 先预热一轮：等子进程确实写出第一个标记后再进入并发流程。否则在 -race
+	// 或负载较高的机器上，子进程可能在跑到写标记之前就被停掉，标记文件根本
+	// 不会出现，测试会以“文件不存在”这种与主题无关的方式失败。
+	if err := m.Start(); err != nil {
+		t.Fatalf("预热启动失败: %v", err)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if data, err := os.ReadFile(marker); err == nil && len(bytes.TrimSpace(data)) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("预热阶段子进程始终没有写出标记文件 %s", marker)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := m.Stop(context.Background()); err != nil {
+		t.Fatalf("预热停止失败: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
