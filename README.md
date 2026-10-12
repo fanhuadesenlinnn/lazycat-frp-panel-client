@@ -260,9 +260,26 @@ gh run download <run-id> -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/gi
 
 ## 验证状态
 
-- 管理器代码在本机（Windows + Go 1.24.1）通过了 `go vet ./...`、`go test ./...`，
-  并做过本机 HTTP 冒烟测试（健康检查、内嵌页面、令牌登录/会话/退出、CSRF 拒绝、
-  配置保存、密钥不回传、日志脱敏、`-trust-ingress` 行为与「非回环 + trust-ingress 拒绝启动」）。
-- Linux 侧的 `go test -race`、两个架构的编译与 `.lpk` 打包由 GitHub Actions 执行。
-- **未**在懒猫设备上实机安装验证，也未连接真实远端 Master 做过联调；
-  真实设备上的安装与联调请由使用者在自己的环境完成。
+已经实际跑通的检查：
+
+- **本地（Windows + Go 1.24.1）**：`gofmt` 无差异、`go vet ./...` 干净、`go test ./...` 全绿；
+  并做过本机 HTTP 冒烟测试——`/healthz`、内嵌页面与静态资源、匿名访问 401、
+  伪造 `X-HC-*` 请求头被拒（未开启信任时）、缺少自定义请求头返回 403、
+  错误令牌 401 / 正确令牌换取 HttpOnly 会话 Cookie、带会话访问成功、退出登录后失效、
+  保存配置不回传密钥、日志中密钥已脱敏、开启 `-trust-ingress` 后管理员通过而普通账号被拒、
+  以及「非回环监听 + `-trust-ingress`」被拒绝启动。
+- **GitHub Actions（Linux）**：[`Build application`](
+  https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/workflows/build.yml)
+  在 push `main` 后执行了 `go vet ./...`、`go test -race -count=1 ./...`、
+  两个架构（amd64/arm64）的交叉编译、`lzc-cli project release` 打包与 `lzc-cli lpk lint`，
+  全部通过；产物 `lazycat-frp-panel-client-0.1.0.lpk`（LPK v2）与上下游源码归档、
+  `SHA256SUMS` 一起上传。
+- 下载核对：CI 产物中的 `.lpk` 经 `lzc-cli lpk info` / `lpk lint` 校验通过，
+  `content.tar` 内 `start.sh` 与 `bin/**` 的可执行位为 `0755`，两个架构的 ELF 二进制
+  与本机交叉编译结果逐字节一致，`SHA256SUMS` 与实际文件相符。
+
+**尚未**验证的部分（请以你自己的环境实测为准）：
+
+- 未在懒猫微服设备上实机安装、启动过本应用（没有可用的测试设备）。
+- 未连接真实远端 Master 做过端到端联调；上游客户端的实际穿透效果取决于你的 Master 配置。
+- Docker 镜像只做了 Dockerfile 与运行参数的静态检查，未在容器里实测运行。
