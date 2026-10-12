@@ -234,6 +234,8 @@ gh run download <run-id> -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/gi
 | 改了密钥后客户端没有生效 | 修改会写盘并自动重启正在运行的客户端；若客户端处于停止状态，需要手动点「启动」。 |
 | 暴露的服务连不上 | 客户端在容器网络里，`127.0.0.1` 指容器自身。把目标改成宿主机的局域网 IP。 |
 | 想让日志更详细 | 把「日志级别」设为 `debug` 并保存，会自动重启客户端生效。 |
+| 客户端一直连不上 Master 的 9001 端口 | 上游默认 `CLIENT_TLS_RPC=true`（Master 的 gRPC 端口默认启用 TLS），所以 `grpc://host:9001` 就是正确写法；若你的 Master 关掉了 gRPC TLS，需要给客户端补 `CLIENT_TLS_RPC=false`——本应用界面没有该开关，可在 `lzc-manifest.yml` 的 `environment` 里追加后重新打包。 |
+| 粘贴的命令里带了 `CLIENT_FEATURES_*` / `LOGGER_*` 赋值 | 这些赋值会被**忽略**并提示（安全边界与日志级别只由界面控制）；请用界面上的开关与下拉框设置。 |
 
 ---
 

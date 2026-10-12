@@ -130,6 +130,34 @@ func TestParseCommandRejectsUnknownEnvAssignment(t *testing.T) {
 	}
 }
 
+// 粘贴的命令里如果带上了功能开关或日志级别的环境变量赋值，必须明确告知“已忽略”，
+// 而不是静默丢掉（尤其不能让 CLIENT_FEATURES_ENABLE_REMOTE_SHELL=true 看起来“生效了”）。
+func TestParseCommandIgnoresFeatureAndLoggerEnvAssignments(t *testing.T) {
+	cmd := `CLIENT_FEATURES_ENABLE_REMOTE_SHELL=true LOGGER_DEFAULT_LOGGER_LEVEL=debug ` +
+		`./frp-panel client -s sec1 -i user.c.c1 --api-url http://a:9000 --rpc-url grpc://a:9001`
+	res, err := ParseCommand(cmd)
+	if err != nil {
+		t.Fatalf("ParseCommand 失败: %v", err)
+	}
+	joined := strings.Join(res.Warnings, "\n")
+	for _, want := range []string{
+		"CLIENT_FEATURES_ENABLE_REMOTE_SHELL",
+		"LOGGER_DEFAULT_LOGGER_LEVEL",
+		"已忽略",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("警告中应包含 %q，实际: %v", want, res.Warnings)
+		}
+	}
+	if len(res.Missing) != 0 {
+		t.Fatalf("命令本身应可正常解析: %v", res.Missing)
+	}
+	// 真正有意义的四个字段不受影响。
+	if res.ClientID != "user.c.c1" || res.Secret != "sec1" {
+		t.Fatalf("解析结果不正确: %+v", res)
+	}
+}
+
 func TestParseCommandDeprecatedFlags(t *testing.T) {
 	res, err := ParseCommand(`./frp-panel client -s abc12345 -i id2 -r frpp.example.com -c 9001 -t frpp.example.com -p 9000 -e http`)
 	if err != nil {

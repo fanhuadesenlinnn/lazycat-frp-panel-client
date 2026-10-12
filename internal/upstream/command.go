@@ -286,8 +286,15 @@ func ParseCommand(line string) (Result, error) {
 		if !allowedEnvAssignments[name] {
 			return res, fmt.Errorf("不支持的环境变量 %s，请改用对应的命令行参数", name)
 		}
-		applyValue(&res, name, value)
-		res.Warnings = append(res.Warnings, fmt.Sprintf("从环境变量赋值读取了 %s", name))
+		if applyValue(&res, name, value) {
+			res.Warnings = append(res.Warnings, fmt.Sprintf("从环境变量赋值读取了 %s", name))
+		} else {
+			// 日志级别与功能开关是有意不从这里生效的：前者在界面上有下拉框，
+			// 后者涉及安全边界（远程命令执行 / Serverless 函数），必须由使用者
+			// 在本应用的界面上显式勾选，绝不能因为粘贴了一行命令就被打开。
+			res.Warnings = append(res.Warnings,
+				fmt.Sprintf("已忽略环境变量赋值 %s=%s：请在管理界面里通过对应开关/下拉框设置", name, value))
+		}
 		idx++
 	}
 
@@ -419,7 +426,9 @@ func ParseCommand(line string) (Result, error) {
 	return res, nil
 }
 
-func applyValue(res *Result, name, value string) {
+// applyValue maps a whitelisted environment assignment onto a Result field and
+// reports whether the assignment was actually applied.
+func applyValue(res *Result, name, value string) bool {
 	switch name {
 	case "CLIENT_ID":
 		res.ClientID = value
@@ -429,7 +438,10 @@ func applyValue(res *Result, name, value string) {
 		res.APIURL = value
 	case "CLIENT_RPC_URL":
 		res.RPCURL = value
+	default:
+		return false
 	}
+	return true
 }
 
 func splitEnvAssignment(tok string) (name, value string, ok bool) {

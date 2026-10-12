@@ -162,6 +162,7 @@
           <li>含管道、重定向、命令替换（<code>|</code>、<code>&gt;</code>、<code>$(</code> 等）的文本会被直接拒绝，避免被当作 shell 命令。</li>
           <li>命令中的程序路径仅用于展示，实际始终执行镜像内自带的、随包固定版本的上游客户端。</li>
           <li>第一版不支持 <code>--join-token</code> 自动加入，请在 Master 上创建客户端后复制含密钥的命令。</li>
+          <li>命令里若带有 <code>CLIENT_FEATURES_ENABLE_*</code> / <code>LOGGER_*</code> 环境变量赋值，会被<b>忽略</b>并给出提示：功能开关请在下方勾选框里显式设置，日志级别请用下拉框。</li>
         </ul>
       </details>
     </section>
