@@ -207,10 +207,10 @@ Master 给出的客户端启动命令即可。应用声明了 `application.backg
 
 ### 用 GitHub Actions 构建的安装包
 
-本仓库的 `.github/workflows/build.yml` 在 push `main` / PR / tag / 手动触发时运行：
+本仓库的 `.github/workflows/build.yml` 在 push `main` / PR / 手动触发时运行：
 Linux 下先 `go vet` + `go test -race`，再检出固定 commit 的上游源码，交叉编译两个架构的
 两个二进制，用 `lzc-cli` 打包成 `.lpk`，并把 `.lpk`、上下游源码归档与 `SHA256SUMS`
-一起上传为构建产物（artifact）。
+一起上传为构建产物（artifact，保留 30 天）。
 
 下载方式：
 
@@ -220,6 +220,41 @@ gh run download <run-id> -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/gi
 ```
 
 或者在 GitHub 仓库的 **Actions → 对应 workflow run → Artifacts** 里点选下载。
+
+### 大版本发布（GitHub 流水线）
+
+正式版本一律走 `.github/workflows/release.yml`：**推送 `v*` 标签即自动构建并发布
+GitHub Release**，不需要在本地打包。
+
+```bash
+# 1) 先把 package.yml 的 version 改好（必须与标签一致，例如 0.1.0 -> 0.2.0）并提交
+git commit -am "release: v0.2.0"
+# 2) 打带说明的标签，连同提交一起推送
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin main --follow-tags
+```
+
+流水线依次执行：
+
+1. 检出该标签对应的代码，跑 `go vet ./...` 与 `go test -race -count=1 ./...`；
+2. 检出固定 commit 的上游源码，交叉编译 amd64 / arm64 两个架构的两个二进制；
+3. `lzc-cli project release` 打包 LPK，兜底修正 `content.tar` 内的可执行位，再跑 `lpk lint`；
+4. 校验 `SHA256SUMS` 与实际文件相符；
+5. 创建 GitHub Release，附件为 `lazycat-frp-panel-client-<version>.lpk`、上游与客户端源码
+   归档、`SHA256SUMS`。
+
+防呆与重跑约定：
+
+- **标签与 `package.yml` 的 `version` 不一致会直接失败**（例如标签 `v0.2.0` 但 package.yml
+  还写着 `0.1.0`），避免发出名实不符的包；标签必须形如 `v1.2.3`（可带 `-rc1` 后缀）。
+- 同名 Release 已存在时，重跑会以 `--clobber` 覆盖附件，不会因为「已存在」而报错。
+- 也可以在 **Actions → Release → Run workflow** 手动触发，填入已推送的标签来重跑发布。
+
+下载已发布的包：
+
+```bash
+gh release download v0.2.0 -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/release
+```
 
 ---
 
