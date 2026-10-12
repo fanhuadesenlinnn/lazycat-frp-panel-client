@@ -275,10 +275,13 @@ gh run download <run-id> -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/gi
   在 push `main` 后执行了 `go vet ./...`、`go test -race -count=1 ./...`、
   两个架构（amd64/arm64）的交叉编译、`lzc-cli project release` 打包与 `lzc-cli lpk lint`，
   全部通过；产物 `lazycat-frp-panel-client-0.1.0.lpk`（LPK v2）与上下游源码归档、
-  `SHA256SUMS` 一起上传。
+  `SHA256SUMS` 一起上传。示例运行：[run 38251077121](
+  https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/runs/38251077121)。
 - 下载核对：CI 产物中的 `.lpk` 经 `lzc-cli lpk info` / `lpk lint` 校验通过，
-  `content.tar` 内 `start.sh` 与 `bin/**` 的可执行位为 `0755`，两个架构的 ELF 二进制
-  与本机交叉编译结果逐字节一致，`SHA256SUMS` 与实际文件相符。
+  `content.tar` 内 `start.sh` 与 `bin/**` 的可执行位为 `0755`；两个架构的 ELF 类型与
+  `machine` 字段正确（amd64 `0x3E`、arm64 `0xB7`），文件大小与本机交叉编译一致，
+  `SHA256SUMS` 与实际文件相符。注意 Go 构建并非逐字节可复现，因此 CI 与本机编译出的
+  二进制哈希通常不同，属预期现象。
 
 **尚未**验证的部分（请以你自己的环境实测为准）：
 
