@@ -256,6 +256,11 @@ git push origin main --follow-tags
 gh release download v0.2.0 -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/release
 ```
 
+本仓库的第一个正式版本 `v0.1.0` 就是由这条流水线发布的（
+[Release v0.1.0](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/releases/tag/v0.1.0)，
+[运行记录 38256147419](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/runs/38256147419)），
+下载后的 `sha256sum -c SHA256SUMS`、`lzc-cli lpk lint` 均已复验通过。
+
 ---
 
 ## 故障排查
