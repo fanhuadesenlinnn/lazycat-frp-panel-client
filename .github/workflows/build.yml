@@ -1,0 +1,57 @@
+name: Build application
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: false
+      - name: Test manager
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
+      - name: Check out pinned upstream
+        uses: actions/checkout@v4
+        with:
+          repository: VaalaCat/frp-panel
+          ref: 1a58b856d7de19de8669b7072872986d2fa1604a
+          path: .upstream/frp-panel
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go124-frpp-${{ hashFiles('.upstream/frp-panel/go.sum') }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install packager
+        run: npm install --global @lazycatcloud/lzc-cli@2.0.9
+      - name: Compile and package
+        run: bash scripts/ci-release.sh
+      - name: Upload installation package and sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: lazycat-frp-panel-client-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30

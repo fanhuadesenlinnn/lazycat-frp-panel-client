@@ -1,0 +1,7 @@
+# 构建配置（正式发布使用）。CI 会先编译好 content/bin 下的二进制，
+# 因此这里不配置 buildscript；若你希望 lzc-cli 自己调用编译脚本，
+# 可以把 buildscript 设为 ./scripts/build-binaries.sh。
+manifest: ./lzc-manifest.yml
+contentdir: ./content
+pkgout: ./dist
+icon: ./icon.png

@@ -1,0 +1,9 @@
+/dist/
+/build/
+/data/
+/content/bin/
+*.exe
+*.test
+/.upstream/
+/.lzc-cli-build*/
+/.build-tools/

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>懒猫 · frp-panel 客户端</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div class="atmosphere" aria-hidden="true"></div>
+
+<header class="topbar reveal">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+    <div class="brand-text">
+      <h1>frp-panel 客户端</h1>
+      <p>懒猫微服 · 单客户端管理器</p>
+    </div>
+  </div>
+  <div class="topbar-meta">
+    <span class="chip" id="identity-chip">身份：读取中…</span>
+    <span class="chip" id="version-chip">版本 —</span>
+    <button type="button" class="btn btn-small" id="btn-logout" hidden>退出登录</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel reveal" id="login-panel" hidden>
+    <header class="panel-head">
+      <h2>需要登录</h2>
+      <p id="login-hint">未检测到懒猫登录身份。请从懒猫微服的启动器打开本应用；
+        若你是通过 Docker 或本机直接运行管理器，请输入访问令牌。</p>
+    </header>
+    <form id="login-form" class="form" autocomplete="off">
+      <label class="field">
+        <span class="field-label">访问令牌</span>
+        <input type="password" id="f-token" name="token" placeholder="数据目录中 config.json 的 admin_token" spellcheck="false">
+        <span class="field-hint">令牌在首次启动时自动生成并保存在数据目录的 config.json（字段 admin_token）；
+          也可以用环境变量 <code>LZCFRPP_ADMIN_TOKEN</code> 预设。登录成功后令牌不会留在地址栏。</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">登录</button>
+      </div>
+      <p class="notice" id="login-notice" hidden></p>
+    </form>
+  </section>
+
+  <section class="hero reveal app-section" id="hero">
+    <div class="hero-main">
+      <div class="hero-head">
+        <span class="dot" id="state-dot" data-state="unknown"></span>
+        <span class="state-label" id="state-label">读取中…</span>
+      </div>
+      <dl class="metrics">
+        <div><dt>进程 PID</dt><dd id="m-pid">—</dd></div>
+        <div><dt>本次运行</dt><dd id="m-uptime">—</dd></div>
+        <div><dt>异常重启次数</dt><dd id="m-restarts">—</dd></div>
+        <div><dt>上次退出</dt><dd id="m-exit">—</dd></div>
+      </dl>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="btn-start">启动</button>
+        <button type="button" class="btn" id="btn-restart">重启</button>
+        <button type="button" class="btn btn-danger" id="btn-stop">停止</button>
+      </div>
+      <p class="notice" id="state-notice" hidden></p>
+    </div>
+
+    <aside class="hero-side">
+      <h2>Master 可达性</h2>
+      <p class="hint">仅表示本容器能否连上配置的 Master 地址，<strong>不代表</strong>该客户端已在 Master 上注册成功或处于“在线”状态。</p>
+      <dl class="probe">
+        <div><dt>探测目标</dt><dd id="p-target">—</dd></div>
+        <div><dt>TCP 连接</dt><dd id="p-tcp">—</dd></div>
+        <div><dt>HTTP 响应</dt><dd id="p-http">—</dd></div>
+        <div><dt>耗时 / 时间</dt><dd id="p-time">—</dd></div>
+      </dl>
+    </aside>
+  </section>
+
+  <div class="columns app-section">
+    <section class="panel reveal">
+      <header class="panel-head">
+        <h2>连接配置</h2>
+        <p>密钥只保存在容器内的持久目录，不会回传到浏览器，也不写入日志。</p>
+      </header>
+      <form id="config-form" class="form" autocomplete="off">
+        <label class="field">
+          <span class="field-label">客户端 ID</span>
+          <input type="text" id="f-client-id" name="client_id" placeholder="user.c.client1" spellcheck="false">
+        </label>
+        <label class="field">
+          <span class="field-label">客户端密钥</span>
+          <input type="password" id="f-secret" name="client_secret" placeholder="留空表示保持现有密钥" spellcheck="false">
+          <span class="field-hint" id="secret-hint">尚未保存密钥</span>
+        </label>
+        <label class="field">
+          <span class="field-label">API URL</span>
+          <input type="text" id="f-api-url" name="api_url" placeholder="http://frpp.example.com:9000" spellcheck="false">
+        </label>
+        <label class="field">
+          <span class="field-label">RPC URL</span>
+          <input type="text" id="f-rpc-url" name="rpc_url" placeholder="grpc://frpp.example.com:9001" spellcheck="false">
+          <span class="field-hint">只支持 grpc:// / ws:// / wss://，TLS 反向代理场景请使用 wss://</span>
+        </label>
+        <label class="field">
+          <span class="field-label">日志级别</span>
+          <select id="f-log-level" name="log_level">
+            <option value="info">info</option>
+            <option value="debug">debug</option>
+            <option value="warn">warn</option>
+            <option value="error">error</option>
+          </select>
+        </label>
+
+        <fieldset class="switches">
+          <legend>运行选项</legend>
+          <label class="switch">
+            <input type="checkbox" id="f-auto-start" name="auto_start">
+            <span>容器启动后自动运行客户端</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="f-functions" name="enable_functions">
+            <span>允许 Master 下发 Serverless 函数（CLIENT_FEATURES_ENABLE_FUNCTIONS）</span>
+          </label>
+          <label class="switch switch-warn">
+            <input type="checkbox" id="f-remote-shell" name="enable_remote_shell">
+            <span>允许 Master 远程执行命令（CLIENT_FEATURES_ENABLE_REMOTE_SHELL，高风险）</span>
+          </label>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">保存配置</button>
+          <button type="button" class="btn" id="btn-reload">重新载入</button>
+        </div>
+        <p class="notice" id="config-notice" hidden></p>
+      </form>
+    </section>
+
+    <section class="panel reveal">
+      <header class="panel-head">
+        <h2>粘贴上游启动命令</h2>
+        <p>直接把 frp-panel 主控 WebUI 里复制的启动命令粘进来。管理器在进程内解析，<strong>不会</strong>交给 shell 执行。</p>
+      </header>
+      <textarea id="command-input" class="command" rows="4" spellcheck="false"
+        placeholder="./frp-panel client -s 你的密钥 -i user.c.client1 --api-url http://frpp.example.com:9000 --rpc-url grpc://frpp.example.com:9001"></textarea>
+      <div class="form-actions">
+        <button type="button" class="btn" id="btn-preview">仅解析预览</button>
+        <button type="button" class="btn btn-primary" id="btn-apply">解析、保存并启动</button>
+      </div>
+      <div class="parse-result" id="parse-result" hidden>
+        <h3>解析结果</h3>
+        <dl class="parsed" id="parsed-list"></dl>
+        <ul class="warnings" id="parsed-warnings"></ul>
+      </div>
+      <p class="notice" id="command-notice" hidden></p>
+
+      <details class="notes">
+        <summary>解析规则与安全说明</summary>
+        <ul>
+          <li>只识别 <code>-s/-i/--api-url/--rpc-url</code>；旧参数 <code>--api-host/--rpc-host/--api-port/--rpc-port/--api-scheme</code> 会被推导为 URL 并给出提示。</li>
+          <li>含管道、重定向、命令替换（<code>|</code>、<code>&gt;</code>、<code>$(</code> 等）的文本会被直接拒绝，避免被当作 shell 命令。</li>
+          <li>命令中的程序路径仅用于展示，实际始终执行镜像内自带的、随包固定版本的上游客户端。</li>
+          <li>第一版不支持 <code>--join-token</code> 自动加入，请在 Master 上创建客户端后复制含密钥的命令。</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+
+  <section class="panel reveal app-section">
+    <header class="panel-head panel-head-row">
+      <div>
+        <h2>客户端日志</h2>
+        <p>有界内存缓冲（<span id="log-cap">—</span> 行），密钥已统一脱敏，容器重启后清空。</p>
+      </div>
+      <div class="log-tools">
+        <label class="switch switch-inline">
+          <input type="checkbox" id="log-follow" checked>
+          <span>自动滚动</span>
+        </label>
+        <button type="button" class="btn btn-small" id="btn-log-clear">清空</button>
+      </div>
+    </header>
+    <pre class="log" id="log-view" aria-live="polite"></pre>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>lzc-frpp-client <span id="foot-version">—</span></span>
+  <span id="foot-paths">—</span>
+  <span>上游项目：<a href="https://github.com/VaalaCat/frp-panel" rel="noreferrer noopener" target="_blank">VaalaCat/frp-panel</a>（AGPL-3.0）</span>
+</footer>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/assets/app.js"></script>
+</body>
+</html>

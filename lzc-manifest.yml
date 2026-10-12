@@ -1,0 +1,34 @@
+# 运行结构定义。静态元数据（package/version/name/...）在 package.yml。
+#
+# 只有一个容器：application 容器（系统默认 alpine 基础镜像）承担全部工作。
+# 它通过 exec:// 路由启动包内的管理器（lazycat 会在启动时执行该脚本），
+# 浏览器访问应用域名时，ingress 完成登录鉴权后转发到 127.0.0.1:18080。
+#
+# 管理器只监听回环地址，因此管理端口不会暴露到宿主网络；
+# 也正因为如此，这里没有使用 network_mode: host。
+usage: |
+  首次使用前，请在 frp-panel 主控（Master）的 WebUI 中进入“客户端”页面，创建一个客户端节点，
+  复制形如 `./frp-panel client -s <密钥> -i <客户端ID> --api-url ... --rpc-url ...` 的启动命令，
+  粘贴到本应用首页的“粘贴上游启动命令”框内即可完成配置。
+
+  说明：
+  - 客户端运行在本应用自己的容器网络命名空间内，访问宿主机的服务请使用宿主机的局域网 IP，
+    而不是 127.0.0.1；访问同一局域网内的其它设备同理。
+  - 第一版不包含 WireGuard 与 Serverless Worker 的管理界面。
+  - 客户端日志中的客户端密钥会被自动脱敏后再展示。
+
+application:
+  subdomain: frpp
+  # 后台常驻：即使没有页面在访问，也保持管理器（进而保持 frp-panel 客户端）
+  # 持续运行，避免穿透连接随页面关闭而休眠。
+  background_task: true
+  routes:
+    - /=exec://18080,/lzcapp/pkg/content/start.sh
+  environment:
+    # 默认只允许懒猫管理员账号访问管理界面；改为 0 可放开给任意已登录用户。
+    - LZCFRPP_REQUIRE_ADMIN=1
+    # 懒猫部署：管理器只监听容器内的回环地址 127.0.0.1:18080，浏览器的请求必然
+    # 经过 lzc-ingress，因此可以信任 ingress 注入的 X-HC-User-ID / X-HC-User-Role。
+    # 这里显式写死，避免依赖运行时的环境变量猜测；standalone / Docker 部署不会带上
+    # 这一项，管理器的 -allow-non-loopback-listen 也会拒绝与 -trust-ingress 同时使用。
+    - LZCFRPP_TRUST_INGRESS=1

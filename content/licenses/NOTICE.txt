@@ -1,0 +1,28 @@
+本应用（lazycat-frpp / lzc-frpp-client）由两部分组成
+=====================================================
+
+1) 管理器与网页界面（lzc-frpp-client）
+   许可证: AGPL-3.0
+   源码:   https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client
+
+2) 上游客户端二进制（frp-panel-client）
+   项目:   frp-panel <https://github.com/VaalaCat/frp-panel>
+   许可证: GNU Affero General Public License v3.0 (AGPL-3.0)
+   构建来源: 由上述仓库源码编译，未做任何修改
+   固定提交: 1a58b856d7de19de8669b7072872986d2fa1604a
+   固定标签: v0.1.37
+
+关于 AGPL-3.0 的说明
+--------------------
+frp-panel-client 是 AGPL-3.0 授权的自由软件，按原样分发、未做修改。
+本应用并不链接该程序，而是以独立子进程的方式调用，并完整保留其许可证与
+源码出处；你可以从上述上游地址获取其完整源代码。
+
+本包内不包含上游仓库的完整源代码，只包含由该源码编译得到的二进制。
+如果你需要完全离线的源码归档：
+
+  * GitHub Actions 的每次构建都会把 `frp-panel-source-<commit>.tar.gz` 与
+    `lazycat-client-source.tar.gz` 作为构建产物（artifact）一并上传，可直接下载；
+  * 或者参考 README 中「可复现构建」一节，用固定 commit 的源码重新编译。
+
+完整许可证文本请见 https://www.gnu.org/licenses/agpl-3.0.txt

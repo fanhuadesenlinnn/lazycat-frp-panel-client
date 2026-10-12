@@ -1,0 +1,21 @@
+package: cloud.lazycat.app.frp-panel-client
+version: 0.1.0
+name: frp-panel 客户端
+description: 在内网设备上运行 frp-panel client，把本机与局域网服务通过自建 Master 暴露出去；提供中文管理界面，管理客户端进程与连接参数。
+author: fanhuadesenlinnn
+license: AGPL-3.0
+homepage: https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client
+min_os_version: 1.5.0
+locales:
+  zh-CN:
+    name: frp-panel 客户端
+    description: 在内网设备上运行 frp-panel client，把本机与局域网服务通过自建 Master 暴露出去；提供中文管理界面，管理客户端进程与连接参数。
+  en-US:
+    name: frp-panel Client
+    description: Run the frp-panel client on your LAN device and publish local services through your own master. Ships a Chinese web UI to control the client process and its connection settings.
+permissions:
+  required:
+    # 需要访问自建的 frp-panel Master（通常位于公网）
+    - net.internet
+    # 需要访问局域网内的目标服务，才能把它们通过 frp 暴露出去
+    - net.lan
