@@ -1,10 +1,16 @@
 #!/bin/sh
 # 懒猫微服 frp-panel 客户端管理器的启动入口。
-# 由 lzc-manifest.yml 的 exec:// 路由在应用容器内执行。
+# 由 lzc-manifest.yml 的 exec:// 路由在应用容器内执行（懒猫应用镜像里位于
+# /app/start.sh，二进制在 /app/bin/linux-<arch>/）。
 #
-# 这里只做架构分派，不做任何用户输入拼接：参数要么来自包内固定路径，
-# 要么是应用平台传入的参数（"$@"）。
+# 这里只做架构分派 + 路径解析，不做任何用户输入拼接：参数要么来自镜像/包内
+# 固定路径，要么是应用平台传入的参数（"$@"）。
 set -eu
+
+case "$0" in
+  */*) SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) ;;
+  *) SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$(command -v -- "$0")")" && pwd) ;;
+esac
 
 case "$(uname -m)" in
   x86_64|amd64)
@@ -19,7 +25,10 @@ case "$(uname -m)" in
     ;;
 esac
 
-BASE="/lzcapp/pkg/content/bin/linux-${ARCH}"
+# 镜像布局：/app/start.sh + /app/bin/linux-<arch>/…
+# 历史打包布局（二进制内嵌在 LPK 里）：/lzcapp/pkg/content/{start.sh,bin/…}
+# 两种布局都用"脚本自己所在目录"来定位二进制，因此同一份脚本通用。
+BASE="${SELF_DIR}/bin/linux-${ARCH}"
 
 if [ ! -x "${BASE}/lzc-frpp-client" ]; then
   echo "未找到管理器可执行文件: ${BASE}/lzc-frpp-client" >&2

@@ -1,7 +1,13 @@
-# 构建配置（正式发布使用）。CI 会先编译好 content/bin 下的二进制，
-# 因此这里不配置 buildscript；若你希望 lzc-cli 自己调用编译脚本，
-# 可以把 buildscript 设为 ./scripts/build-binaries.sh。
+# 构建配置（正式发布使用）。
+#
+# 这里刻意不配置 contentdir：本应用是 image-only 包——管理器、上游客户端与
+# 启动脚本都在 lzc-manifest.yml 的 application.image 指向的镜像里
+# （见 Dockerfile.lpk），LPK 只保存一条镜像引用，所以安装包只有几百 KB。
+# 若在这里加回 contentdir，二进制会被重新打进 LPK（100 MB 级别），
+# scripts/ci-release.sh 的大小检查会直接失败。
+#
+# 也不配置 buildscript：二进制由 scripts/build-binaries.sh / ci-release.sh
+# 显式编译，可用 lzc-cli project deploy 之外的流程复用同一份产物。
 manifest: ./lzc-manifest.yml
-contentdir: ./content
 pkgout: ./dist
 icon: ./icon.png

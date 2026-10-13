@@ -1,7 +1,11 @@
 # 运行结构定义。静态元数据（package/version/name/...）在 package.yml。
 #
-# 只有一个容器：application 容器（系统默认 alpine 基础镜像）承担全部工作。
-# 它通过 exec:// 路由启动包内的管理器（lazycat 会在启动时执行该脚本），
+# 只有一个容器：application 容器承担全部工作，镜像由 application.image 指定。
+# 管理器与上游 frp-panel 客户端都在该镜像里（见 Dockerfile.lpk），.lpk 只保存
+# 这条镜像引用——安装包因此只有几百 KB，镜像在安装时由微服从镜像服务器拉取。
+# 配置里没有 contentdir：这是 image-only 包，不会生成 content.tar。
+#
+# 容器启动时 lazycat 会执行 exec:// 路由里的脚本（即镜像内 /app/start.sh），
 # 浏览器访问应用域名时，ingress 完成登录鉴权后转发到 127.0.0.1:18080。
 #
 # 管理器只监听回环地址，因此管理端口不会暴露到宿主网络；
@@ -18,12 +22,21 @@ usage: |
   - 客户端日志中的客户端密钥会被自动脱敏后再展示。
 
 application:
+  # 应用镜像：管理器 + 上游 frp-panel 客户端 + /app/start.sh 都在里面。
+  # 发布流水线会以同样的版本号把镜像推送到 ghcr.io（见
+  # .github/workflows/release.yml 与 scripts/build-image.sh）。
+  #
+  # 上架商店 / 在微服上安装前，建议先用
+  #   lzc-cli appstore copy-image ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:<version>
+  # 把镜像转存到懒猫官方源，并把下面这行换成它打印出的
+  # registry.lazycat.cloud/<你的社区用户名>/... 引用（官方源在微服内更稳定）。
+  image: ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:0.2.0
   subdomain: frpp
   # 后台常驻：即使没有页面在访问，也保持管理器（进而保持 frp-panel 客户端）
   # 持续运行，避免穿透连接随页面关闭而休眠。
   background_task: true
   routes:
-    - /=exec://18080,/lzcapp/pkg/content/start.sh
+    - /=exec://18080,/app/start.sh
   environment:
     # 默认只允许懒猫管理员账号访问管理界面；改为 0 可放开给任意已登录用户。
     - LZCFRPP_REQUIRE_ADMIN=1

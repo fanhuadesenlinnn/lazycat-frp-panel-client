@@ -1,0 +1,32 @@
+# 懒猫应用镜像（应用容器镜像，供 lzc-manifest.yml 的 application.image 引用）。
+#
+# 懒猫微服的安装包（.lpk）本身保持很小：镜像不内嵌进 .lpk，而是在安装/启动时
+# 由微服从镜像服务器（registry）拉取。因此二进制、启动脚本和许可证都放在镜像里，
+# .lpk 只保存一条镜像引用。
+#
+# 构建前必须先产出 content/bin/linux-<arch>/（scripts/build-binaries.sh），
+# 或用 scripts/build-image.sh 一步完成"编译 + 构建镜像"。
+# 注意：content/ 现在是本镜像的构建输入，不再是 LPK 的 contentdir。
+#
+# 多架构：用 docker buildx --platform linux/amd64,linux/arm64 构建，
+# TARGETARCH 由 buildx 注入，每个平台只 COPY 自己那一份二进制。
+
+FROM alpine:3.21
+
+ARG TARGETARCH=amd64
+
+# 管理器要访问自建 Master 的 HTTPS/gRPC 接口，需要根证书。
+RUN apk add --no-cache ca-certificates
+
+COPY content/bin/linux-${TARGETARCH} /app/bin/linux-${TARGETARCH}
+COPY content/start.sh /app/start.sh
+COPY content/licenses /app/licenses
+
+RUN chmod 0755 /app/start.sh \
+    /app/bin/linux-${TARGETARCH}/lzc-frpp-client \
+    /app/bin/linux-${TARGETARCH}/frp-panel-client
+
+# 懒猫运行时由 lzcinit 接管应用容器，管理器通过 manifest 里的
+# exec://18080,/app/start.sh 路由启动，因此这里的 CMD 在微服里不会被执行；
+# 保留它只是让镜像可以单独 `docker run` 时有个合理行为。
+CMD ["/app/start.sh"]
