@@ -98,13 +98,8 @@ func TestMultipleConnectionsRunAndRemainIsolated(t *testing.T) {
 	if pidA == 0 || pidB == 0 || pidA == pidB {
 		t.Fatal("two independent processes were not started")
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for len(a.logs.Tail(10)) == 0 || len(b.logs.Tail(10)) == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("child output not captured")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForClientLog(t, a.logs, "client-a")
+	waitForClientLog(t, b.logs, "client-b")
 	for _, c := range []struct{ id, own, other string }{{"default", "client-a", "client-b"}, {id, "client-b", "client-a"}} {
 		res := h.do(t, "GET", "/api/logs?connection="+c.id, nil, nil)
 		requireOK(t, res)
@@ -112,7 +107,7 @@ func TestMultipleConnectionsRunAndRemainIsolated(t *testing.T) {
 			t.Fatalf("logs leaked across connections or exposed a secret: %s", res.body)
 		}
 	}
-	if got := b.logs.Tail(1)[0].Text; !strings.Contains(got, filepath.Join("connections", id, "workerd")) {
+	if got := waitForClientLog(t, b.logs, "client-b"); !strings.Contains(got, filepath.Join("connections", id, "workerd")) {
 		t.Fatalf("worker directory not isolated: %s", got)
 	}
 	a.probe.Run(context.Background())
@@ -214,14 +209,23 @@ func TestCommandApplyTargetsSelectedConnectionAndAutoStartSurvivesRestart(t *tes
 	if a.sup.Status().State != supervisor.StateStopped || b.sup.Status().State != supervisor.StateRunning || cfg.Name != "备用面板" {
 		t.Fatal("per-connection auto start or configuration did not survive restart")
 	}
+	if strings.Contains(waitForClientLog(t, b.logs, "command-client-b"), "command-secret-b") {
+		t.Fatal("persisted secret was not registered with the redactor")
+	}
+}
+
+func waitForClientLog(t *testing.T, logs *logbuf.Ring, clientID string) string {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for len(b.logs.Tail(10)) == 0 {
+	for {
+		for _, line := range logs.Tail(100) {
+			if strings.Contains(line.Text, "client="+clientID+" ") {
+				return line.Text
+			}
+		}
 		if time.Now().After(deadline) {
-			t.Fatal("child output not captured after restart")
+			t.Fatalf("child output not captured for %s", clientID)
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-	if strings.Contains(b.logs.Tail(1)[0].Text, "command-secret-b") {
-		t.Fatal("persisted secret was not registered with the redactor")
 	}
 }
