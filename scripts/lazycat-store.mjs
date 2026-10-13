@@ -186,7 +186,7 @@ async function ensureStoreApp(pkg) {
   }
 }
 
-async function publish() {
+async function preparePackage({ archSuffix = false } = {}) {
   if (!process.env.LZC_CLI_TOKEN) throw new Error('Missing login token');
   const image = process.env.PUBLIC_IMAGE;
   const arch = process.env.STORE_ARCH || 'amd64';
@@ -201,12 +201,21 @@ async function publish() {
   setManifestImage(ref);
   fs.writeFileSync('dist/IMAGE.txt', `image: ${ref}\nsource: ${image}\narch: ${arch}\n`);
   console.log(`Official image (${arch}): ${ref}`);
-  const lpk = `dist/lazycat-frp-panel-client-${pkg.version}.lpk`;
+  const lpk = `dist/lazycat-frp-panel-client-${pkg.version}${archSuffix ? `-${arch}` : ""}.lpk`;
   runCLI(['project', 'release', '-f', 'lzc-build.yml', '-o', lpk]);
   await assertLpkReferences(lpk, ref);
   runCLI(['lpk', 'lint', lpk]);
   runCLI(['lpk', 'info', lpk]);
 
+  fs.writeFileSync(`dist/IMAGE-${arch}.txt`, `image: ${ref}\nsource: ${image}\narch: ${arch}\n`);
+  fs.writeFileSync(`dist/lzc-manifest-${arch}.yml`, fs.readFileSync('lzc-manifest.yml'));
+  fs.writeFileSync(`dist/package-${arch}.json`, JSON.stringify({ package: pkg.package, version: pkg.version, image: ref, sourceImage: image, arch, lpk, submitted: false }, null, 2) + '\n');
+  console.log('Image copied and LPK verified; no app-store submission performed.');
+  return { pkg, ref, arch, lpk };
+}
+
+async function publish() {
+  const { pkg, ref, arch, lpk } = await preparePackage();
   const { Publish } = await load('appstore/publish.js');
   const warnings = await Publish.collectPreCheckWarnings(lpk);
   if (warnings.length) throw new Error(`Store pre-check failed: ${warnings.map((w) => w.code ?? w.message).join(', ')}`);
@@ -303,8 +312,9 @@ async function check() {
 try {
   if (process.argv[2] === 'login') await login();
   else if (process.argv[2] === 'publish') await publish();
+  else if (process.argv[2] === 'package') await preparePackage({ archSuffix: true });
   else if (process.argv[2] === 'check') await check();
-  else throw new Error('Expected login, publish or check');
+  else throw new Error('Expected login, package, publish or check');
 } catch (error) {
   // Never dump response bodies or exception objects containing credentials.
   let message = String(error?.message || 'Lazycat operation failed');

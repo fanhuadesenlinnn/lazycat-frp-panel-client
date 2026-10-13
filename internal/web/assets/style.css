@@ -26,6 +26,12 @@
 
 * { box-sizing: border-box; }
 
+.connections-panel { margin-bottom: 1rem; }
+.connection-tools { display: flex; align-items: flex-end; gap: .8rem; flex-wrap: wrap; padding: 0 1.5rem 1.5rem; }
+.connection-field { flex: 1 1 260px; margin: 0; }
+.connection-dialog { max-width: 480px; width: calc(100% - 2rem); padding: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper-2); color: var(--ink); }
+.connection-dialog::backdrop { background: rgba(20, 32, 30, .35); }
+
 html, body { margin: 0; padding: 0; }
 
 body {

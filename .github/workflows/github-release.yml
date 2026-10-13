@@ -1,0 +1,134 @@
+name: Prepare GitHub test release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-test-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+          cache: false
+      - name: Test
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
+      - uses: actions/checkout@v4
+        with:
+          repository: VaalaCat/frp-panel
+          ref: 1a58b856d7de19de8669b7072872986d2fa1604a
+          path: .upstream/frp-panel
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go124-frpp-${{ hashFiles('.upstream/frp-panel/go.sum') }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Select version
+        id: meta
+        run: |
+          version=$(sed -n 's/^version:[[:space:]]*//p' package.yml | tr -d '\r')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY}:$version" >> "$GITHUB_OUTPUT"
+      - name: Compile both architectures
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          for arch in amd64 arm64; do
+            out="$PWD/content/bin/linux-$arch"
+            mkdir -p "$out"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$out/lzc-frpp-client" .
+            (cd .upstream/frp-panel && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -mod=readonly -trimpath -ldflags '-s -w -X github.com/VaalaCat/frp-panel/conf.gitCommit=1a58b856d7de19de8669b7072872986d2fa1604a -X github.com/VaalaCat/frp-panel/conf.gitVersion=1a58b85' -o "$out/frp-panel-client" ./cmd/frppc)
+          done
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build, check and push image
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: bash scripts/build-image.sh --push --repo "ghcr.io/${GITHUB_REPOSITORY}" --tag "$VERSION" --no-latest
+      - name: Archive sources
+        run: |
+          git archive --format=tar.gz --output="$PWD/dist/lazycat-client-source.tar.gz" HEAD
+          git -C .upstream/frp-panel archive --format=tar.gz --output="$PWD/dist/frp-panel-source.tar.gz" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-release-source-${{ github.run_id }}
+          path: dist/*
+
+  package:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: github-release-source-${{ github.run_id }}
+          path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned CLI
+        run: npm install --prefix .tools --no-audit --no-fund @lazycatcloud/lzc-cli@2.0.9
+      - name: Log in without exposing credentials
+        env:
+          LAZYCAT_USERNAME: ${{ secrets.LAZYCAT_USERNAME }}
+          LAZYCAT_PASSWORD: ${{ secrets.LAZYCAT_PASSWORD }}
+        run: node scripts/lazycat-store.mjs login
+      - name: Copy both images and build test packages without submitting to the store
+        env:
+          PUBLIC_IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          for arch in amd64 arm64; do
+            STORE_ARCH="$arch" node scripts/lazycat-store.mjs package
+          done
+          cp dist/lzc-manifest-amd64.yml dist/lzc-manifest.yml
+          printf '%s\n' "Build commit: $GITHUB_SHA" "GitHub run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > dist/BUILD.txt
+          (cd dist && sha256sum *.lpk *-source.tar.gz IMAGE-*.txt lzc-manifest-*.yml package-*.json BUILD.txt > SHA256SUMS)
+      - name: Upload verified test packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-test-release-${{ needs.build.outputs.version }}
+          path: |
+            dist/*.lpk
+            dist/*-source.tar.gz
+            dist/IMAGE-*.txt
+            dist/lzc-manifest*.yml
+            dist/package-*.json
+            dist/BUILD.txt
+            dist/SHA256SUMS
+          if-no-files-found: error

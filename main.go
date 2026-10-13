@@ -27,8 +27,6 @@ import (
 	"github.com/fanhuadesenlinnn/lazycat-frp-panel-client/internal/config"
 	"github.com/fanhuadesenlinnn/lazycat-frp-panel-client/internal/logbuf"
 	"github.com/fanhuadesenlinnn/lazycat-frp-panel-client/internal/redact"
-	"github.com/fanhuadesenlinnn/lazycat-frp-panel-client/internal/supervisor"
-	"github.com/fanhuadesenlinnn/lazycat-frp-panel-client/internal/upstream"
 	"github.com/fanhuadesenlinnn/lazycat-frp-panel-client/internal/web"
 )
 
@@ -119,33 +117,14 @@ func run() error {
 		ring.Write([]byte("WARN 未找到 frp-panel 客户端可执行文件：" + err.Error() + "\n"))
 	}
 
-	sup := supervisor.New(func() (supervisor.Spec, error) {
-		cfg := store.Get()
-		if !cfg.Configured() {
-			return supervisor.Spec{}, errors.New("尚未完成配置：请填写客户端 ID、密钥、API URL 与 RPC URL")
+	if binPath != "" {
+		binPath, err = filepath.Abs(binPath)
+		if err != nil {
+			return err
 		}
-		path := binPath
-		if *clientBin != "" {
-			path = *clientBin
-		}
-		spec := upstream.LaunchSpec{
-			ClientID:          cfg.ClientID,
-			Secret:            cfg.ClientSecret,
-			APIURL:            cfg.APIURL,
-			RPCURL:            cfg.RPCURL,
-			LogLevel:          cfg.LogLevel,
-			EnableRemoteShell: cfg.EnableRemoteShell,
-			EnableFunctions:   cfg.EnableFunctions,
-		}
-		return supervisor.Spec{
-			Path: path,
-			Args: spec.Argv(),
-			Env:  spec.Env(),
-			Dir:  *dataDir,
-		}, nil
-	}, supervisor.Options{Sink: ring})
+	}
 
-	srv, err := web.New(store, sup, ring, red, web.Options{
+	srv, err := web.New(store, nil, ring, red, web.Options{
 		Version:      version,
 		DataDir:      *dataDir,
 		ClientBinary: binPath,
@@ -167,7 +146,7 @@ func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go srv.Probe().Loop(ctx, *probeInterval)
+	go srv.RunProbes(ctx, *probeInterval)
 
 	httpSrv := &httpServer{Handler: srv.Handler()}
 	server := newHTTPServer(httpSrv)
@@ -192,22 +171,14 @@ func run() error {
 		}
 	}()
 
-	if cfg := store.Get(); cfg.AutoStart && cfg.Configured() && binPath != "" {
-		if err := sup.Start(); err != nil {
-			ring.Write([]byte("ERROR 自动启动失败：" + err.Error() + "\n"))
-		} else {
-			ring.Write([]byte("INFO 已按配置自动启动 frp-panel 客户端\n"))
-		}
-	} else if cfg.AutoStart && !cfg.Configured() {
-		ring.Write([]byte("WARN 配置启用自动启动，但连接参数不完整，已跳过\n"))
-	}
+	srv.AutoStart()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case err := <-errCh:
-		_ = sup.Close(context.Background())
+		_ = srv.Close(context.Background())
 		return err
 	case sig := <-sigCh:
 		ring.Write([]byte(fmt.Sprintf("INFO 收到信号 %s，开始优雅退出\n", sig)))
@@ -216,7 +187,7 @@ func run() error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	_ = server.Shutdown(shutdownCtx)
-	if err := sup.Close(shutdownCtx); err != nil {
+	if err := srv.Close(shutdownCtx); err != nil {
 		return err
 	}
 	return nil

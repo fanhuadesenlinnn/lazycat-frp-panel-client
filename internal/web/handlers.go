@@ -18,8 +18,11 @@ func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAuth(w, r); !ok {
 		return
 	}
-	cfg := s.store.Get()
-	snap := s.sup.Status()
+	rt, cfg, ok := s.requestConnection(w, r)
+	if !ok {
+		return
+	}
+	snap := rt.sup.Status()
 	now := time.Now()
 
 	process := map[string]any{
@@ -35,19 +38,29 @@ func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 		"last_error":                snap.LastError,
 	}
 	remote := map[string]any{
-		"probe":        s.probe.Last(),
-		"probe_target": s.probe.Target(),
+		"probe":        rt.probe.Last(),
+		"probe_target": rt.probe.Target(),
 		"claim":        "unknown",
 		"note": "本应用无法从本机确认客户端是否已在 Master 上注册成功。" +
 			"下方探针只表示本容器能否建立到 Master 的网络连接，不能作为“在线”的凭据。",
 	}
+	connections := []map[string]any{}
+	for _, id := range s.store.ConnectionIDs() {
+		conn, settings, err := s.connection(id)
+		if err != nil {
+			continue
+		}
+		connections = append(connections, map[string]any{"id": id, "config": settings.Public(), "process": conn.sup.Status()})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":      true,
-		"version": s.opts.Version,
-		"now":     now,
-		"process": process,
-		"remote":  remote,
-		"config":  cfg.Public(),
+		"connection_id": connectionID(r),
+		"connections":   connections,
+		"ok":            true,
+		"version":       s.opts.Version,
+		"now":           now,
+		"process":       process,
+		"remote":        remote,
+		"config":        cfg.Public(),
 		"runtime": map[string]any{
 			"data_dir":      s.opts.DataDir,
 			"client_binary": s.opts.ClientBinary,
@@ -68,7 +81,11 @@ func (s *Server) apiGetConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAuth(w, r); !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "config": s.store.Get().Public()})
+	_, cfg, ok := s.requestConnection(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "config": cfg.Public()})
 }
 
 // apiLogin exchanges the local access token for an HttpOnly session cookie.
@@ -116,6 +133,7 @@ func (s *Server) apiLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 type configRequest struct {
+	Name              *string `json:"name"`
 	ClientID          *string `json:"client_id"`
 	ClientSecret      *string `json:"client_secret"`
 	ClearSecret       *bool   `json:"clear_secret"`
@@ -131,14 +149,22 @@ func (s *Server) apiSetConfig(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireMutation(w, r); !ok {
 		return
 	}
+	s.connectionOps.Lock()
+	defer s.connectionOps.Unlock()
+	rt, before, ok := s.requestConnection(w, r)
+	if !ok {
+		return
+	}
 	var req configRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
 
-	before := s.store.Get()
-	next, err := s.store.Update(func(c *config.Config) error {
+	next, err := s.store.UpdateConnection(connectionID(r), func(c *config.Config) error {
+		if req.Name != nil {
+			c.Name = *req.Name
+		}
 		if req.ClientID != nil {
 			c.ClientID = *req.ClientID
 		}
@@ -173,12 +199,14 @@ func (s *Server) apiSetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.red.AddLiterals(next.ClientSecret)
-	s.probe.SetTarget(next.APIURL)
+	if before.APIURL != next.APIURL {
+		rt.probe.SetTarget(next.APIURL)
+	}
 
 	restarted := false
 	if restartNeeded(before, next) {
-		if snap := s.sup.Status(); snap.State == supervisor.StateRunning || snap.State == supervisor.StateBackoff {
-			if err := s.sup.Restart(r.Context()); err != nil {
+		if snap := rt.sup.Status(); snap.State == supervisor.StateRunning || snap.State == supervisor.StateBackoff {
+			if err := rt.sup.Restart(r.Context()); err != nil {
 				fail(w, http.StatusInternalServerError, fmt.Errorf("配置已保存，但重启客户端失败：%w", err))
 				return
 			}
@@ -228,10 +256,17 @@ func (s *Server) apiApplyCommand(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireMutation(w, r); !ok {
 		return
 	}
+	s.connectionOps.Lock()
+	defer s.connectionOps.Unlock()
+	rt, before, ok := s.requestConnection(w, r)
+	if !ok {
+		return
+	}
 	var req struct {
-		Command   string `json:"command"`
-		AutoStart *bool  `json:"auto_start"`
-		Start     bool   `json:"start"`
+		Command   string  `json:"command"`
+		Name      *string `json:"name"`
+		AutoStart *bool   `json:"auto_start"`
+		Start     bool    `json:"start"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		fail(w, http.StatusBadRequest, err)
@@ -247,8 +282,10 @@ func (s *Server) apiApplyCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	before := s.store.Get()
-	next, err := s.store.Update(func(c *config.Config) error {
+	next, err := s.store.UpdateConnection(connectionID(r), func(c *config.Config) error {
+		if req.Name != nil {
+			c.Name = *req.Name
+		}
 		c.ClientID = res.ClientID
 		c.APIURL = res.APIURL
 		c.RPCURL = res.RPCURL
@@ -265,23 +302,25 @@ func (s *Server) apiApplyCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.red.AddLiterals(next.ClientSecret)
-	s.probe.SetTarget(next.APIURL)
+	if before.APIURL != next.APIURL {
+		rt.probe.SetTarget(next.APIURL)
+	}
 
 	started := false
 	if req.Start {
-		if snap := s.sup.Status(); snap.State == supervisor.StateRunning {
-			if err := s.sup.Restart(r.Context()); err != nil {
+		if snap := rt.sup.Status(); snap.State == supervisor.StateRunning {
+			if err := rt.sup.Restart(r.Context()); err != nil {
 				fail(w, http.StatusInternalServerError, fmt.Errorf("配置已保存，但重启客户端失败：%w", err))
 				return
 			}
-		} else if err := s.sup.Start(); err != nil {
+		} else if err := rt.sup.Start(); err != nil {
 			fail(w, http.StatusInternalServerError, fmt.Errorf("配置已保存，但启动客户端失败：%w", err))
 			return
 		}
 		started = true
 	} else if restartNeeded(before, next) {
-		if snap := s.sup.Status(); snap.State == supervisor.StateRunning {
-			if err := s.sup.Restart(r.Context()); err != nil {
+		if snap := rt.sup.Status(); snap.State == supervisor.StateRunning || snap.State == supervisor.StateBackoff {
+			if err := rt.sup.Restart(r.Context()); err != nil {
 				fail(w, http.StatusInternalServerError, fmt.Errorf("配置已保存，但重启客户端失败：%w", err))
 				return
 			}
@@ -299,6 +338,12 @@ func (s *Server) apiControl(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireMutation(w, r); !ok {
 		return
 	}
+	s.connectionOps.Lock()
+	defer s.connectionOps.Unlock()
+	rt, _, ok := s.requestConnection(w, r)
+	if !ok {
+		return
+	}
 	var req struct {
 		Action string `json:"action"`
 	}
@@ -308,17 +353,17 @@ func (s *Server) apiControl(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.Action {
 	case "start":
-		if err := s.sup.Start(); err != nil {
+		if err := rt.sup.Start(); err != nil {
 			fail(w, http.StatusConflict, err)
 			return
 		}
 	case "stop":
-		if err := s.sup.Stop(r.Context()); err != nil {
+		if err := rt.sup.Stop(r.Context()); err != nil {
 			fail(w, http.StatusInternalServerError, err)
 			return
 		}
 	case "restart":
-		if err := s.sup.Restart(r.Context()); err != nil {
+		if err := rt.sup.Restart(r.Context()); err != nil {
 			fail(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -326,11 +371,15 @@ func (s *Server) apiControl(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, errors.New("action 只能是 start/stop/restart"))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": s.sup.Status()})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": rt.sup.Status()})
 }
 
 func (s *Server) apiLogs(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAuth(w, r); !ok {
+		return
+	}
+	rt, _, ok := s.requestConnection(w, r)
+	if !ok {
 		return
 	}
 	q := r.URL.Query()
@@ -340,13 +389,13 @@ func (s *Server) apiLogs(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusBadRequest, errors.New("since 必须是数字"))
 			return
 		}
-		lines := s.logs.Since(since)
+		lines := rt.logs.Since(since)
 		dropped := false
 		if len(lines) > 0 && lines[0].Seq > since+1 {
 			dropped = true
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"ok": true, "lines": lines, "next": s.logs.LastSeq(), "dropped": dropped,
+			"ok": true, "lines": lines, "next": rt.logs.LastSeq(), "dropped": dropped,
 		})
 		return
 	}
@@ -359,13 +408,13 @@ func (s *Server) apiLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		tail = n
 	}
-	lines := s.logs.Tail(tail)
-	next := s.logs.LastSeq()
+	lines := rt.logs.Tail(tail)
+	next := rt.logs.LastSeq()
 	if len(lines) > 0 {
 		next = lines[len(lines)-1].Seq
 	}
 	if tail == 0 {
-		next = s.logs.LastSeq()
+		next = rt.logs.LastSeq()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "lines": lines, "next": next})
 }
@@ -374,6 +423,10 @@ func (s *Server) apiClearLogs(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireMutation(w, r); !ok {
 		return
 	}
-	s.logs.Clear()
+	rt, _, ok := s.requestConnection(w, r)
+	if !ok {
+		return
+	}
+	rt.logs.Clear()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

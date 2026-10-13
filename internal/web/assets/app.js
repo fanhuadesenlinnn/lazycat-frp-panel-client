@@ -22,9 +22,21 @@
   var statusTimer = null;
   var logTimer = null;
 
+  var selectedConnection = "default";
+  var connectionGeneration = 0;
+  var configDirty = false;
+  var connections = [];
+  var connectionSignature = "";
+
   function $(id) { return document.getElementById(id); }
 
   function api(method, path, body) {
+    var scoped = /^\/api\/(status|config|control|logs|command)(\/|\?|$)/.test(path);
+    var requestConnection = selectedConnection;
+    var requestGeneration = connectionGeneration;
+    if (scoped) {
+      path += (path.indexOf("?") >= 0 ? "&" : "?") + "connection=" + encodeURIComponent(requestConnection);
+    }
     var opts = {
       method: method,
       headers: {
@@ -42,6 +54,11 @@
         var data = null;
         if (text) {
           try { data = JSON.parse(text); } catch (e) { data = null; }
+        }
+        if (scoped && (requestConnection !== selectedConnection || requestGeneration !== connectionGeneration)) {
+          var stale = new Error("连接已切换，请在相应连接中查看操作结果");
+          stale.stale = true;
+          throw stale;
         }
         if (!resp.ok) {
           var msg = (data && data.error) ? data.error : ("请求失败（HTTP " + resp.status + "）");
@@ -135,7 +152,7 @@
   function fmtClock(iso) {
     if (!iso) { return "—"; }
     var d = new Date(iso);
-    if (isNaN(d.getTime())) { return "—"; }
+    if (isNaN(d.getTime()) || d.getFullYear() <= 1) { return "—"; }
     return d.toLocaleTimeString("zh-CN", { hour12: false });
   }
 
@@ -156,6 +173,7 @@
   }
 
   function renderStatus(data) {
+    renderConnections(data.connections || []);
     var proc = data.process || {};
     var state = proc.state || "stopped";
     $("state-dot").setAttribute("data-state", state);
@@ -215,9 +233,12 @@
   }
 
   function applyConfigToForm(config, force) {
+    if (!force && configDirty) { return; }
+    if (force) { configDirty = false; }
     if (!force && document.activeElement && document.activeElement.closest && document.activeElement.closest("#config-form")) {
       // 不要覆盖用户正在输入的内容
     } else {
+      if (config.name !== undefined) { $("f-name").value = config.name || ""; }
       if (config.client_id !== undefined) { $("f-client-id").value = config.client_id || ""; }
       if (config.api_url !== undefined) { $("f-api-url").value = config.api_url || ""; }
       if (config.rpc_url !== undefined) { $("f-rpc-url").value = config.rpc_url || ""; }
@@ -241,6 +262,7 @@
     var view = $("log-view");
     var follow = $("log-follow").checked;
     lines.forEach(function (line) {
+      if (line.seq <= logCursor) { return; }
       var span = document.createElement("span");
       span.className = "ln";
       var ts = document.createElement("span");
@@ -249,9 +271,10 @@
       span.appendChild(ts);
       span.appendChild(document.createTextNode(line.text));
       view.appendChild(span);
+      logCursor = line.seq;
     });
     if (lines.length) {
-      logCursor = lines[lines.length - 1].seq;
+      logCursor = Math.max(logCursor, lines[lines.length - 1].seq);
     }
     // 只保留有限行数，避免长时间运行后页面卡顿
     while (view.childElementCount > logCap) {
@@ -267,6 +290,12 @@
       renderStatus(data);
       setAuthed(true);
     }).catch(function (err) {
+      if (err.stale) { return; }
+      if (err.status === 404 && selectedConnection !== "default") {
+        toast("当前连接已被删除，已切回默认连接。");
+        switchConnection("default");
+        return;
+      }
       if (err.status === 401) {
         showLogin(err.message);
         return;
@@ -297,6 +326,7 @@
 
   function collectConfig() {
     var body = {
+      name: $("f-name").value.trim(),
       client_id: $("f-client-id").value.trim(),
       api_url: $("f-api-url").value.trim(),
       rpc_url: $("f-rpc-url").value.trim(),
@@ -381,7 +411,10 @@
   function applyCommand() {
     var command = $("command-input").value;
     setBusy("#btn-apply", true);
-    api("POST", "/api/command/apply", { command: command, start: true }).then(function (data) {
+    api("POST", "/api/command/apply", {
+      command: command, start: true,
+      name: $("f-name").value.trim(), auto_start: $("f-auto-start").checked
+    }).then(function (data) {
       (data.warnings || []).forEach(function (w) { toast(w); });
       $("command-input").value = "";
       $("parse-result").hidden = true;
@@ -480,6 +513,16 @@
   }
 
   function init() {
+    $("connection-select").addEventListener("change", function () { switchConnection(this.value); });
+    $("btn-connection-add").addEventListener("click", addConnection);
+    $("btn-connection-delete").addEventListener("click", function () {
+      $("delete-description").textContent = "即将删除“" + ($("f-name").value || "当前连接") + "”。";
+      $("delete-dialog").showModal();
+    });
+    $("btn-delete-cancel").addEventListener("click", function () { $("delete-dialog").close(); });
+    $("btn-delete-confirm").addEventListener("click", deleteConnection);
+    $("config-form").addEventListener("input", function () { configDirty = true; });
+    $("config-form").addEventListener("change", function () { configDirty = true; });
     $("btn-start").addEventListener("click", function () { control("start"); });
     $("btn-stop").addEventListener("click", function () { control("stop"); });
     $("btn-restart").addEventListener("click", function () { control("restart"); });
@@ -493,6 +536,73 @@
     $("log-cap").textContent = String(logCap);
 
     bootstrap();
+  }
+
+  function renderConnections(items) {
+    connections = items;
+    var running = items.filter(function (item) { return item.process.state === "running"; }).length;
+    $("connections-summary").textContent = items.length + " 个连接 · " + running + " 个运行中";
+    var signature = JSON.stringify(items.map(function (item) {
+      return [item.id, item.config.name, item.process.state];
+    }));
+    if (signature !== connectionSignature) {
+      connectionSignature = signature;
+      var select = $("connection-select");
+      select.textContent = "";
+      items.forEach(function (item) {
+        var option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = (item.config.name || "未命名连接") + " · " + (STATE_TEXT[item.process.state] || item.process.state);
+        select.appendChild(option);
+      });
+      select.value = selectedConnection;
+    }
+    $("btn-connection-delete").disabled = selectedConnection === "default";
+    $("btn-connection-add").disabled = items.length >= 32;
+  }
+
+  function switchConnection(id) {
+    connectionGeneration++;
+    selectedConnection = id;
+    $("connection-select").value = id;
+    configDirty = false;
+    $("f-secret").value = "";
+    $("command-input").value = "";
+    $("parse-result").hidden = true;
+    $("log-view").textContent = "";
+    logCursor = 0;
+    ["config-notice", "command-notice", "state-notice"].forEach(function (notice) { showNotice(notice, "", null); });
+    var item = connections.find(function (connection) { return connection.id === id; });
+    applyConfigToForm(item ? item.config : { name: "", client_id: "", api_url: "", rpc_url: "", log_level: "info" }, true);
+    $("state-label").textContent = "读取中…";
+    setBusy(".actions .btn", true);
+    $("btn-connection-delete").disabled = id === "default";
+    pollStatus();
+    pollLogs();
+  }
+
+  function addConnection() {
+    setBusy("#btn-connection-add", true);
+    api("POST", "/api/connections", { name: "新连接" }).then(function (data) {
+      connections.push({ id: data.id, config: data.config, process: { state: "stopped" } });
+      switchConnection(data.id);
+      toast("已新增连接，请粘贴该面板的启动命令或填写连接配置。", "ok");
+    }).catch(function (err) { toast(err.message, "error"); }).then(function () {
+      setBusy("#btn-connection-add", false);
+    });
+  }
+
+  function deleteConnection() {
+    var id = selectedConnection;
+    setBusy("#btn-delete-confirm", true);
+    api("POST", "/api/connections/delete", { id: id }).then(function () {
+      $("delete-dialog").close();
+      connections = connections.filter(function (item) { return item.id !== id; });
+      switchConnection("default");
+      toast("连接已停止并删除", "ok");
+    }).catch(function (err) { toast(err.message, "error"); }).then(function () {
+      setBusy("#btn-delete-confirm", false);
+    });
   }
 
   if (document.readyState === "loading") {

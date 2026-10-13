@@ -15,7 +15,7 @@
     <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
     <div class="brand-text">
       <h1>frp-panel 客户端</h1>
-      <p>懒猫微服 · 单客户端管理器</p>
+      <p>懒猫微服 · 多面板连接管理器</p>
     </div>
   </div>
   <div class="topbar-meta">
@@ -44,6 +44,24 @@
       </div>
       <p class="notice" id="login-notice" hidden></p>
     </form>
+  </section>
+
+  <section class="panel reveal app-section connections-panel">
+    <header class="panel-head panel-head-row">
+      <div>
+        <h2>远程面板连接</h2>
+        <p>可同时连接多个独立面板。下方配置、启停和日志对应当前选中的连接。</p>
+      </div>
+      <span class="chip" id="connections-summary">读取中…</span>
+    </header>
+    <div class="connection-tools">
+      <label class="field connection-field">
+        <span class="field-label">当前连接</span>
+        <select id="connection-select" aria-label="选择远程面板连接"></select>
+      </label>
+      <button type="button" class="btn btn-primary" id="btn-connection-add">新增连接</button>
+      <button type="button" class="btn btn-danger" id="btn-connection-delete" disabled>删除连接</button>
+    </div>
   </section>
 
   <section class="hero reveal app-section" id="hero">
@@ -85,6 +103,10 @@
         <p>密钥只保存在容器内的持久目录，不会回传到浏览器，也不写入日志。</p>
       </header>
       <form id="config-form" class="form" autocomplete="off">
+        <label class="field">
+          <span class="field-label">连接名称</span>
+          <input type="text" id="f-name" name="name" maxlength="80" placeholder="例如：香港面板、备用面板">
+        </label>
         <label class="field">
           <span class="field-label">客户端 ID</span>
           <input type="text" id="f-client-id" name="client_id" placeholder="user.c.client1" spellcheck="false">
@@ -193,6 +215,15 @@
 </footer>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
+<dialog id="delete-dialog" class="connection-dialog">
+  <h2>删除连接</h2>
+  <p id="delete-description"></p>
+  <p>此操作会停止该连接并删除已保存的连接配置。</p>
+  <div class="form-actions">
+    <button type="button" class="btn" id="btn-delete-cancel">取消</button>
+    <button type="button" class="btn btn-danger" id="btn-delete-confirm">删除并停止</button>
+  </div>
+</dialog>
 <script src="/assets/app.js"></script>
 </body>
 </html>

@@ -19,6 +19,7 @@ DOCKER="${DOCKER:-docker}"
 DOCKERFILE="${DOCKERFILE:-Dockerfile.lpk}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 PUSH=0
+LATEST=1
 REPO=""
 TAG=""
 
@@ -26,6 +27,7 @@ usage() {
   cat <<'EOF'
 用法: scripts/build-image.sh [选项]
   --push                 构建后推送到 registry（不加则只构建校验）
+  --no-latest            不更新 latest 标签（测试版本使用）
   --repo <name>          覆盖镜像仓库名（默认取 lzc-manifest.yml 的 application.image）
   --tag <tag>            覆盖标签（默认取 lzc-manifest.yml 的 application.image）
   --platforms <list>     目标平台（默认 linux/amd64,linux/arm64）
@@ -36,6 +38,7 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     --push) PUSH=1; shift ;;
+    --no-latest) LATEST=0; shift ;;
     --repo) REPO="$2"; shift 2 ;;
     --tag) TAG="$2"; shift 2 ;;
     --platforms) PLATFORMS="$2"; shift 2 ;;
@@ -98,7 +101,7 @@ if [ "$TAG" != "$VERSION" ]; then
 fi
 
 args=(buildx build --platform "$PLATFORMS" -f "$DOCKERFILE" -t "$REPO:$TAG")
-if [ "$TAG" = "$VERSION" ]; then
+if [ "$TAG" = "$VERSION" ] && [ "$LATEST" = 1 ]; then
   args+=(-t "$REPO:latest")
 fi
 

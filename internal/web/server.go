@@ -78,8 +78,12 @@ type session struct {
 
 // Server is the HTTP front end.
 type Server struct {
-	mu      sync.Mutex
-	session map[string]session
+	connectionOps sync.Mutex
+	runtimeMu     sync.Mutex
+	runtimes      map[string]*connectionRuntime
+	closed        bool
+	mu            sync.Mutex
+	session       map[string]session
 
 	store *config.Store
 	red   Redactor
@@ -119,6 +123,16 @@ func New(store *config.Store, sup *supervisor.Manager, ring *logbuf.Ring, red Re
 		opts:    opts,
 	}
 	s.probe = NewProbe(store.Get().APIURL)
+	s.runtimes = make(map[string]*connectionRuntime)
+	if sup == nil {
+		sup = s.newManager(config.DefaultConnection, ring)
+		s.sup = sup
+	}
+	s.runtimes[config.DefaultConnection] = &connectionRuntime{sup: sup, logs: ring, probe: s.probe}
+	for _, id := range store.ConnectionIDs() {
+		cfg, _ := store.Connection(id)
+		red.AddLiterals(cfg.ClientSecret)
+	}
 	assetsFS, err := fs.Sub(assets, "assets")
 	if err != nil {
 		return nil, err
@@ -146,6 +160,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", s.html))
 
 	mux.HandleFunc("GET /api/status", s.apiStatus)
+	mux.HandleFunc("POST /api/connections", s.apiAddConnection)
+	mux.HandleFunc("POST /api/connections/delete", s.apiDeleteConnection)
 	mux.HandleFunc("GET /api/config", s.apiGetConfig)
 	mux.HandleFunc("POST /api/config", s.apiSetConfig)
 	mux.HandleFunc("POST /api/login", s.apiLogin)

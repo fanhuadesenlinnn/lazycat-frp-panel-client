@@ -32,21 +32,24 @@ var allowedLogLevels = map[string]bool{
 
 // Config is the full on-disk configuration.
 type Config struct {
-	ClientID          string    `json:"client_id"`
-	ClientSecret      string    `json:"client_secret"`
-	APIURL            string    `json:"api_url"`
-	RPCURL            string    `json:"rpc_url"`
-	AutoStart         bool      `json:"auto_start"`
-	EnableRemoteShell bool      `json:"enable_remote_shell"`
-	EnableFunctions   bool      `json:"enable_functions"`
-	LogLevel          string    `json:"log_level"`
-	AdminToken        string    `json:"admin_token"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	Name              string       `json:"name"`
+	Connections       []Connection `json:"connections,omitempty"`
+	ClientID          string       `json:"client_id"`
+	ClientSecret      string       `json:"client_secret"`
+	APIURL            string       `json:"api_url"`
+	RPCURL            string       `json:"rpc_url"`
+	AutoStart         bool         `json:"auto_start"`
+	EnableRemoteShell bool         `json:"enable_remote_shell"`
+	EnableFunctions   bool         `json:"enable_functions"`
+	LogLevel          string       `json:"log_level"`
+	AdminToken        string       `json:"admin_token"`
+	UpdatedAt         time.Time    `json:"updated_at"`
 }
 
 // Public is the browser-visible projection of Config. It intentionally has no
 // secret field at all, so a secret can not leak through accidental reuse.
 type Public struct {
+	Name              string    `json:"name"`
 	ClientID          string    `json:"client_id"`
 	SecretSet         bool      `json:"secret_set"`
 	SecretLength      int       `json:"secret_length"`
@@ -63,6 +66,7 @@ type Public struct {
 // Public returns the browser-safe view.
 func (c Config) Public() Public {
 	return Public{
+		Name:              c.Name,
 		ClientID:          c.ClientID,
 		SecretSet:         c.ClientSecret != "",
 		SecretLength:      len([]rune(c.ClientSecret)),
@@ -84,6 +88,7 @@ func (c Config) Configured() bool {
 
 // Normalize trims surrounding whitespace from user supplied values.
 func (c *Config) Normalize() {
+	c.Name = strings.TrimSpace(c.Name)
 	c.ClientID = strings.TrimSpace(c.ClientID)
 	c.ClientSecret = strings.TrimSpace(c.ClientSecret)
 	c.APIURL = strings.TrimSpace(c.APIURL)
@@ -99,6 +104,19 @@ func (c *Config) Normalize() {
 // passes unvalidated text to a shell, but it does pass it to the trusted
 // upstream binary, so garbage in must be rejected early and loudly.
 func (c Config) Validate() error {
+	if len([]rune(c.Name)) > 80 || strings.ContainsFunc(c.Name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return errors.New("连接名称最多 80 个字符，不能包含控制字符")
+	}
+	seen := map[string]bool{DefaultConnection: true}
+	for _, connection := range c.Connections {
+		if !validConnectionID(connection.ID) || seen[connection.ID] {
+			return errors.New("连接标识无效或重复")
+		}
+		seen[connection.ID] = true
+		if err := connection.Config().Validate(); err != nil {
+			return err
+		}
+	}
 	if c.ClientID != "" {
 		if len(c.ClientID) > 128 {
 			return errors.New("客户端 ID 过长（最多 128 个字符）")
@@ -198,6 +216,12 @@ func Open(dir string) (*Store, error) {
 			return nil, fmt.Errorf("解析 %s 失败：%w", s.path, err)
 		}
 		cfg.Normalize()
+		for i := range cfg.Connections {
+			cfg.Connections[i].normalize()
+		}
+		if err := cfg.Validate(); err != nil {
+			return nil, fmt.Errorf("配置校验失败：%w", err)
+		}
 		s.cfg = cfg
 	case os.IsNotExist(err):
 		s.cfg = Config{LogLevel: "info"}
@@ -214,7 +238,7 @@ func (s *Store) Path() string { return s.path }
 func (s *Store) Get() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.cfg
+	return clone(s.cfg)
 }
 
 // Update applies mutate to a copy of the configuration, validates the result
@@ -222,22 +246,25 @@ func (s *Store) Get() Config {
 func (s *Store) Update(mutate func(*Config) error) (Config, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := s.cfg
+	next := clone(s.cfg)
 	if mutate != nil {
 		if err := mutate(&next); err != nil {
-			return s.cfg, err
+			return clone(s.cfg), err
 		}
 	}
 	next.Normalize()
+	for i := range next.Connections {
+		next.Connections[i].normalize()
+	}
 	if err := next.Validate(); err != nil {
-		return s.cfg, err
+		return clone(s.cfg), err
 	}
 	next.UpdatedAt = time.Now().UTC()
 	if err := writeAtomic(s.path, next); err != nil {
-		return s.cfg, err
+		return clone(s.cfg), err
 	}
 	s.cfg = next
-	return next, nil
+	return clone(next), nil
 }
 
 // EnsureAdminToken generates and persists an access token when none exists.
