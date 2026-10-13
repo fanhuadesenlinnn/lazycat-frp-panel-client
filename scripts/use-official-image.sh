@@ -45,6 +45,6 @@ fi
 mv "$tmp" lzc-manifest.yml
 echo "已更新 lzc-manifest.yml: application.image = $REF"
 echo "提醒："
-echo "  1) 重新打包并发布（推送新的 v* 标签，或本地 scripts/build-lpk.sh）；"
-echo "  2) 镜像标签若被 copy-image 换成了镜像 ID，请同步执行："
-echo "       git commit -am '使用官方源镜像 <tag>' && git tag -a vX.Y.Z && git push origin main --follow-tags"
+echo "  1) 更新 package.yml 的包装版本，并重新打包、lint和设备验证；"
+echo "  2) 新 v* 标签发布会复用官方镜像，不重复推送镜像；"
+echo "  3) 商店资料与手动提交步骤见 docs/STORE-SUBMISSION.md。"

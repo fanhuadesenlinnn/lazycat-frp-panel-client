@@ -77,6 +77,12 @@ fi
 REPO="${REPO:-$MANIFEST_REPO}"
 TAG="${TAG:-${MANIFEST_TAG:-$VERSION}}"
 
+# 官方源引用的是已转存的不可变镜像；不能用本机构建覆盖该标签。
+if [[ "$PUSH" = 1 && "$REPO" == registry.lazycat.cloud/* ]]; then
+  echo "官方源镜像已转存，本脚本不向 registry.lazycat.cloud 推送。只需重新打包 LPK。" >&2
+  exit 1
+fi
+
 for arch in ${PLATFORMS//,/ }; do
   arch="${arch##*/}"
   for bin in lzc-frpp-client frp-panel-client; do

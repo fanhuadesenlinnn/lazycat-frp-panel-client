@@ -1,5 +1,9 @@
 # 懒猫 frp-panel 客户端（lzc-frpp-client）
 
+**当前商店包：0.2.3。** 已引用维护者提供的懒猫官方镜像，使用现有镜像重新打包，
+不向懒猫仓库推送镜像。上架资料、打包命令与人工提交步骤见
+[商店提交说明](docs/STORE-SUBMISSION.md)。CI 不会代为提交商店审核。
+
 在懒猫微服（LazyCat）上以**应用**的形式运行上游 [frp-panel](https://github.com/VaalaCat/frp-panel)
 的 **客户端**（`frp-panel client`），并提供中文管理界面来管理这个客户端进程与它的连接参数。
 
