@@ -140,6 +140,47 @@ async function assertLpkReferences(lpkPath, ref) {
   }
 }
 
+// 官方 CLI 的“顺带创建应用”路径会把失败原因吞掉（只打印一段去开发者中心手动创建的说明），
+// 这里自己走一遍：查存在性 → 预检 → 创建，并把服务端返回的状态和内容打出来。
+// 应用已经存在时直接返回，不改动任何商店信息。
+async function ensureStoreApp(pkg) {
+  const { request } = await load('appstore/login.js');
+  const base = 'https://appstore.api.lazycat.cloud/api/v3/developer';
+
+  const check = await request(`${base}/app/check/exist?package=${encodeURIComponent(pkg.package)}`, { method: 'GET' });
+  const checkBody = (await check.text()).trim();
+  console.log(`商店应用存在性检查: status=${check.status} body=${checkBody.slice(0, 200)}`);
+  if (check.ok) {
+    let exists = false;
+    try {
+      exists = JSON.parse(checkBody)?.exist === true;
+    } catch {
+      exists = false;
+    }
+    if (exists) {
+      console.log(`开发者中心已存在应用 ${pkg.package}，跳过创建。`);
+      return;
+    }
+  }
+
+  const preflight = await request(`${base}/app/create`, { method: 'OPTIONS' });
+  console.log(`app/create 预检: status=${preflight.status}`);
+
+  const payload = {
+    package: pkg.package,
+    language: 'zh',
+    name: pkg.name,
+    source: pkg.homepage || '',
+    source_author: pkg.author || '',
+  };
+  const create = await request(`${base}/app/create`, { method: 'POST', body: JSON.stringify(payload) });
+  const createBody = (await create.text()).trim();
+  console.log(`app/create 创建: status=${create.status} body=${createBody.slice(0, 400)}`);
+  if (!create.ok) {
+    throw new Error(`在开发者中心创建应用失败（status=${create.status}）：${createBody.slice(0, 300)}`);
+  }
+}
+
 async function publish() {
   if (!process.env.LZC_CLI_TOKEN) throw new Error('Missing login token');
   const image = process.env.PUBLIC_IMAGE;
@@ -164,6 +205,8 @@ async function publish() {
   const { Publish } = await load('appstore/publish.js');
   const warnings = await Publish.collectPreCheckWarnings(lpk);
   if (warnings.length) throw new Error(`Store pre-check failed: ${warnings.map((w) => w.code ?? w.message).join(', ')}`);
+  // 商店要求应用先在开发者中心存在；CLI 自带的创建流程失败时只给一段说明，这里自己创建并暴露真实原因。
+  await ensureStoreApp(pkg);
   // The CLI prompts only when creating the first store listing. Supply the
   // package metadata; unexpected prompts fail instead of hanging a CI job.
   await patchCliPrompt({
