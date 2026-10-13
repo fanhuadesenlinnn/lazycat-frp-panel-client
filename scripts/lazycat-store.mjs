@@ -77,19 +77,50 @@ function runCLI(args, capture = false) {
 }
 
 async function login() {
-  const username = process.env.LAZYCAT_USERNAME;
-  const password = process.env.LAZYCAT_PASSWORD;
+  const username = (process.env.LAZYCAT_USERNAME || '').trim();
+  let password = process.env.LAZYCAT_PASSWORD || '';
   if (!username || !password) throw new Error('Missing LAZYCAT_USERNAME / LAZYCAT_PASSWORD Secrets');
-  if (!process.env.GITHUB_ENV) throw new Error('Login must run in GitHub Actions');
+  // 从网页或文本里复制密码时，首尾很容易带上空格/换行，账号服务会直接判为“密码错误”。
+  // 密码不会以空白开头或结尾，这里忽略首尾空白并提示（不打印密码本身）。
+  if (password !== password.trim()) {
+    console.error('提示：LAZYCAT_PASSWORD 首尾含空白字符，已忽略首尾空白后重试。');
+    password = password.trim();
+  }
   const { default: config } = await load('config/env.js');
   // Keep the returned token in memory; never persist it to the CLI config file.
   config.save = () => {};
   const { reLogin } = await load('appstore/login.js');
-  await reLogin({ username, password });
-  const token = config.get('token');
+  try {
+    await reLogin({ username, password });
+  } catch (error) {
+    throw new Error(
+      `${error?.message || 'login failed'}（请确认 LAZYCAT_USERNAME / LAZYCAT_PASSWORD 就是登录 developer.lazycat.cloud 的社区账号，密码首尾不要带空格或换行）`,
+    );
+  }
+  const token = String(config.get('token') || '').trim();
   if (!token || /[\r\n]/.test(token)) throw new Error('Login did not return a valid token');
+  if (!process.env.GITHUB_ENV) {
+    // 本地自检模式：只验证账号可用，不写出任何文件，也不打印令牌。
+    console.log('登录成功（本地自检模式，未写入任何文件）。');
+    return;
+  }
   console.log(`::add-mask::${token}`);
   fs.appendFileSync(process.env.GITHUB_ENV, `LZC_CLI_TOKEN=${token}\n`, { mode: 0o600 });
+}
+
+// 打包完成后直接读 LPK 里的 manifest.yml，确认上架包里引用的就是懒猫官方源镜像。
+async function assertLpkReferences(lpkPath, ref) {
+  const tar = requireCLI('tar');
+  const tmpDir = fs.mkdtempSync(path.join('dist', '.lpk-check-'));
+  try {
+    await tar.x({ file: lpkPath, cwd: tmpDir, filter: (entry) => entry === 'manifest.yml' });
+    const manifestPath = path.join(tmpDir, 'manifest.yml');
+    if (!fs.existsSync(manifestPath)) throw new Error('LPK 内缺少 manifest.yml');
+    const image = yaml.load(fs.readFileSync(manifestPath, 'utf8'))?.application?.image;
+    if (image !== ref) throw new Error(`LPK 内 application.image 不是官方源引用: ${image}`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
 
 async function publish() {
@@ -109,6 +140,7 @@ async function publish() {
   console.log(`Official image (${arch}): ${ref}`);
   const lpk = `dist/lazycat-frp-panel-client-${pkg.version}.lpk`;
   runCLI(['project', 'release', '-f', 'lzc-build.yml', '-o', lpk]);
+  await assertLpkReferences(lpk, ref);
   runCLI(['lpk', 'lint', lpk]);
   runCLI(['lpk', 'info', lpk]);
 
