@@ -13,7 +13,10 @@
 
 FROM alpine:3.21
 
-ARG TARGETARCH=amd64
+# TARGETARCH 是 buildx 自动注入的平台参数，这里必须"无默认值"地重新声明：
+# 写成 ARG TARGETARCH=amd64 会让默认值盖掉自动值，导致 arm64 镜像里被塞进
+# amd64 的二进制（曾经真的发生过）。下面的校验会直接拦住这种情况。
+ARG TARGETARCH
 
 # 管理器要访问自建 Master 的 HTTPS/gRPC 接口，需要根证书。
 RUN apk add --no-cache ca-certificates
@@ -22,9 +25,24 @@ COPY content/bin/linux-${TARGETARCH} /app/bin/linux-${TARGETARCH}
 COPY content/start.sh /app/start.sh
 COPY content/licenses /app/licenses
 
-RUN chmod 0755 /app/start.sh \
-    /app/bin/linux-${TARGETARCH}/lzc-frpp-client \
-    /app/bin/linux-${TARGETARCH}/frp-panel-client
+# 交叉校验：镜像里二进制的 ELF 架构必须与目标平台一致
+# （e_machine: amd64=0x3E, arm64=0xB7），否则直接让构建失败。
+RUN set -eux; \
+    chmod 0755 /app/start.sh \
+      /app/bin/linux-${TARGETARCH}/lzc-frpp-client \
+      /app/bin/linux-${TARGETARCH}/frp-panel-client; \
+    case "${TARGETARCH}" in \
+      amd64) want=3e ;; \
+      arm64) want=b7 ;; \
+      *) echo "不支持的 TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    for bin in lzc-frpp-client frp-panel-client; do \
+      got="$(od -An -tx1 -j18 -N1 "/app/bin/linux-${TARGETARCH}/${bin}" | tr -d ' \n')"; \
+      [ "${got}" = "${want}" ] || { \
+        echo "架构不匹配: TARGETARCH=${TARGETARCH} 期望 e_machine=0x${want}，实际 0x${got} (${bin})" >&2; \
+        exit 1; \
+      }; \
+    done
 
 # 懒猫运行时由 lzcinit 接管应用容器，管理器通过 manifest 里的
 # exec://18080,/app/start.sh 路由启动，因此这里的 CMD 在微服里不会被执行；

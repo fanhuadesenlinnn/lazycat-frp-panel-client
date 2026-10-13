@@ -1,5 +1,5 @@
 package: cloud.lazycat.app.frp-panel-client
-version: 0.2.0
+version: 0.2.1
 name: frp-panel 客户端
 description: 在内网设备上运行 frp-panel client，把本机与局域网服务通过自建 Master 暴露出去；提供中文管理界面，管理客户端进程与连接参数。
 author: fanhuadesenlinnn
