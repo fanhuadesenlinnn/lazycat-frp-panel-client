@@ -14,7 +14,9 @@
 
 ## 界面介绍
 
-![frp-panel 客户端管理界面](docs/images/client-overview.png)
+![多面板连接管理](docs/images/multi-panel-overview.png)
+
+![连接配置与日志视图](docs/images/client-overview.png)
 
 上方可选择、添加或删除远程面板连接，并显示当前连接的客户端运行状态和 Master 可达性；下方可填写连接参数，或粘贴远端面板生成的启动命令。
 
