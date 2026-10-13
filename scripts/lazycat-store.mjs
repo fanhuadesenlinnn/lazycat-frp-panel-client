@@ -5,7 +5,24 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const cliRoot = path.resolve(process.env.LZC_CLI_ROOT || '.tools/node_modules/@lazycatcloud/lzc-cli');
+// 官方 CLI 的位置：CI 里 npm 装到 .tools/，本地开发通常放在仓库外的 .build-tools/。
+function resolveCliRoot() {
+  const candidates = [
+    process.env.LZC_CLI_ROOT,
+    '.tools/node_modules/@lazycatcloud/lzc-cli',
+    '../.build-tools/node_modules/@lazycatcloud/lzc-cli',
+    '.build-tools/node_modules/@lazycatcloud/lzc-cli',
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate);
+    if (fs.existsSync(path.join(resolved, 'package.json'))) return resolved;
+  }
+  throw new Error(
+    '未找到 lzc-cli：请先 npm install --prefix .tools @lazycatcloud/lzc-cli@2.0.9，或用 LZC_CLI_ROOT 指定已有安装目录',
+  );
+}
+
+const cliRoot = resolveCliRoot();
 const requireCLI = createRequire(path.join(cliRoot, 'package.json'));
 const yaml = requireCLI('js-yaml');
 const logger = requireCLI('loglevel');
