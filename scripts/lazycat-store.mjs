@@ -193,10 +193,58 @@ async function publish() {
   console.log('LPK submitted for review; approval is pending.');
 }
 
+// 只描述凭据的“结构”（长度、字符类别、首尾是否有空白/引号），绝不打印凭据本身。
+// 用来排查“从网页/手机复制粘贴进 GitHub Secrets 时带进了隐藏字符”这类问题。
+function charClasses(text) {
+  const classes = { 小写: 0, 大写: 0, 数字: 0, 符号: 0, 空白: 0, 非ASCII: 0 };
+  for (const char of text) {
+    if (char >= 'a' && char <= 'z') classes['小写'] += 1;
+    else if (char >= 'A' && char <= 'Z') classes['大写'] += 1;
+    else if (char >= '0' && char <= '9') classes['数字'] += 1;
+    else if (/\s/.test(char)) classes['空白'] += 1;
+    else if (char.codePointAt(0) > 0x7f) classes['非ASCII'] += 1;
+    else classes['符号'] += 1;
+  }
+  return Object.entries(classes)
+    .filter(([, count]) => count > 0)
+    .map(([name, count]) => `${name}×${count}`)
+    .join(' ');
+}
+
+function describeSecret(name, raw) {
+  if (!raw) {
+    console.log(`${name}: 未设置或为空`);
+    return;
+  }
+  const trimmed = raw.trim();
+  const edge = [raw[0], raw[raw.length - 1]]
+    .filter((char) => char !== undefined && /\s/.test(char))
+    .length;
+  console.log(
+    `${name}: 长度=${raw.length} 首尾空白=${raw !== trimmed} 内部连续空白=${/\s{2,}/.test(trimmed)} ` +
+      `首尾含引号=${/^["'`]|["'`]$/.test(raw)} 类别=${charClasses(trimmed)}`,
+  );
+  if (edge) console.log(`  （长度差 ${raw.length - trimmed.length} 个字符是首尾空白）`);
+}
+
+async function check() {
+  const rawUsername = process.env.LAZYCAT_USERNAME || '';
+  const rawPassword = process.env.LAZYCAT_PASSWORD || '';
+  describeSecret('LAZYCAT_USERNAME', rawUsername);
+  if (rawUsername.trim().length > 4) {
+    const name = rawUsername.trim();
+    console.log(`LAZYCAT_USERNAME 预览: ${name.slice(0, 2)}***${name.slice(-2)}`);
+  }
+  describeSecret('LAZYCAT_PASSWORD', rawPassword);
+  console.log('（以上只输出长度与字符类别，不输出凭据内容）');
+  await login();
+}
+
 try {
   if (process.argv[2] === 'login') await login();
   else if (process.argv[2] === 'publish') await publish();
-  else throw new Error('Expected login or publish');
+  else if (process.argv[2] === 'check') await check();
+  else throw new Error('Expected login, publish or check');
 } catch (error) {
   // Never dump response bodies or exception objects containing credentials.
   let message = String(error?.message || 'Lazycat operation failed');
