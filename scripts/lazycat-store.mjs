@@ -177,7 +177,12 @@ async function ensureStoreApp(pkg) {
   const createBody = (await create.text()).trim();
   console.log(`app/create 创建: status=${create.status} body=${createBody.slice(0, 400)}`);
   if (!create.ok) {
-    throw new Error(`在开发者中心创建应用失败（status=${create.status}）：${createBody.slice(0, 300)}`);
+    // 懒猫明确禁止用接口创建应用，必须人工在开发者平台建好，所以这里给出可执行的说明。
+    throw new Error(
+      `开发者中心还没有应用 ${pkg.package}，而懒猫不允许通过接口创建（status=${create.status}: ${createBody.slice(0, 200)}）。\n` +
+        '请先用浏览器打开 https://developer.lazycat.cloud/manage，登录开发者账号后点“新增”，' +
+        `把应用包标识符填成 ${pkg.package}（必须完全一致），名称填 ${pkg.name}，创建成功后再重跑本工作流即可提交审核。`,
+    );
   }
 }
 
