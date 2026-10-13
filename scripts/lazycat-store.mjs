@@ -231,6 +231,18 @@ async function publish() {
   let response;
   try {
     response = await new Publish().publish(lpk, { zh: changelog }, 'zh');
+  } catch (error) {
+    const message = String(error?.message || '');
+    // 应用资料（图标/简介/截图/支持平台）只能在开发者平台网页里填，接口改不了，
+    // 这里把服务端的原因连同一份可照做的清单一起抛出来。
+    if (message.includes('开发者平台提交应用信息')) {
+      throw new Error(
+        `${message}\n` +
+          `提示：请到 https://developer.lazycat.cloud/manage 打开应用 ${pkg.package} 的应用信息，` +
+          '至少勾选“支持桌面端”，并补齐图标、简介、截图等资料，保存后重跑本工作流即可。',
+      );
+    }
+    throw error;
   } finally {
     clearTimeout(watchdog);
   }
