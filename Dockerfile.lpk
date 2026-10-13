@@ -11,6 +11,25 @@
 # 多架构：用 docker buildx --platform linux/amd64,linux/arm64 构建，
 # TARGETARCH 由 buildx 注入，每个平台只 COPY 自己那一份二进制。
 
+# 压缩只发生在构建阶段；运行镜像不携带 UPX、下载工具或未压缩副本。
+FROM --platform=$BUILDPLATFORM alpine:3.21 AS pack
+ARG BUILDARCH
+ARG TARGETARCH
+RUN apk add --no-cache ca-certificates curl xz
+RUN set -eux; \
+    case "$BUILDARCH" in \
+      amd64) checksum=402162aad30af47e60dbd767fb2e64ca394ace9727ba1f40283641f1d1b91657 ;; \
+      arm64) checksum=a72d112c5970a904a31da0b9c84f919bc16b9a311787c12245508544a78c7d36 ;; \
+      *) exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 3 "https://github.com/upx/upx/releases/download/v5.2.1/upx-5.2.1-${BUILDARCH}_linux.tar.xz" -o /tmp/upx.tar.xz; \
+    echo "$checksum  /tmp/upx.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/upx.tar.xz -C /tmp; \
+    cp "/tmp/upx-5.2.1-${BUILDARCH}_linux/upx" /usr/local/bin/upx
+COPY --chmod=755 content/bin/linux-${TARGETARCH}/ /packed/
+RUN upx -9 /packed/lzc-frpp-client /packed/frp-panel-client \
+    && upx -t /packed/lzc-frpp-client /packed/frp-panel-client
+
 FROM alpine:3.21
 
 # TARGETARCH 是 buildx 自动注入的平台参数，这里必须"无默认值"地重新声明：
@@ -21,16 +40,13 @@ ARG TARGETARCH
 # 管理器要访问自建 Master 的 HTTPS/gRPC 接口，需要根证书。
 RUN apk add --no-cache ca-certificates
 
-COPY content/bin/linux-${TARGETARCH} /app/bin/linux-${TARGETARCH}
-COPY content/start.sh /app/start.sh
+COPY --from=pack --chmod=755 /packed/ /app/bin/linux-${TARGETARCH}/
+COPY --chmod=755 content/start.sh /app/start.sh
 COPY content/licenses /app/licenses
 
 # 交叉校验：镜像里二进制的 ELF 架构必须与目标平台一致
 # （e_machine: amd64=0x3E, arm64=0xB7），否则直接让构建失败。
 RUN set -eux; \
-    chmod 0755 /app/start.sh \
-      /app/bin/linux-${TARGETARCH}/lzc-frpp-client \
-      /app/bin/linux-${TARGETARCH}/frp-panel-client; \
     case "${TARGETARCH}" in \
       amd64) want=3e ;; \
       arm64) want=b7 ;; \
@@ -42,7 +58,25 @@ RUN set -eux; \
         echo "架构不匹配: TARGETARCH=${TARGETARCH} 期望 e_machine=0x${want}，实际 0x${got} (${bin})" >&2; \
         exit 1; \
       }; \
-    done
+    done; \
+    /app/bin/linux-${TARGETARCH}/lzc-frpp-client --version; \
+    /app/bin/linux-${TARGETARCH}/frp-panel-client version
+
+# 在目标架构实际启动压缩后的管理器，验证解压运行及 HTTP 健康检查。
+# ARM64 的 CI 构建通过 QEMU 执行，不能只凭 ELF 头判断可运行。
+RUN set -eu; \
+    /app/bin/linux-${TARGETARCH}/lzc-frpp-client \
+      --listen=127.0.0.1:18080 --data-dir=/tmp/lzc-smoke --insecure-no-auth & \
+    pid=$!; \
+    trap 'kill "$pid" 2>/dev/null || true' EXIT; \
+    ready=0; \
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do \
+      if wget -q -O /dev/null http://127.0.0.1:18080/healthz; then ready=1; break; fi; \
+      sleep 1; \
+    done; \
+    [ "$ready" = 1 ]; \
+    kill "$pid"; wait "$pid"; trap - EXIT; \
+    rm -rf /tmp/lzc-smoke
 
 # 懒猫运行时由 lzcinit 接管应用容器，管理器通过 manifest 里的
 # exec://18080,/app/start.sh 路由启动，因此这里的 CMD 在微服里不会被执行；

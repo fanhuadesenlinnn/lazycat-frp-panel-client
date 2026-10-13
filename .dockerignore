@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!Dockerfile.lpk
+!content/
+!content/start.sh
+!content/bin/
+!content/bin/**
+!content/licenses/
+!content/licenses/**

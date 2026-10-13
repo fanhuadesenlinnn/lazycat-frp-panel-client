@@ -49,6 +49,9 @@ jobs:
         run: npm install --global @lazycatcloud/lzc-cli@2.0.9
       - name: Compile and package
         run: bash scripts/ci-release.sh
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@v3
       - name: Validate application image build
         # 不推送，只验证 Dockerfile.lpk 在 amd64/arm64 上都能构建成功。

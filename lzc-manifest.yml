@@ -30,7 +30,7 @@ application:
   #   lzc-cli appstore copy-image ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:<version>
   # 把镜像转存到懒猫官方源，并把下面这行换成它打印出的
   # registry.lazycat.cloud/<你的社区用户名>/... 引用（官方源在微服内更稳定）。
-  image: ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:0.2.1
+  image: ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:0.2.2
   subdomain: frpp
   # 后台常驻：即使没有页面在访问，也保持管理器（进而保持 frp-panel 客户端）
   # 持续运行，避免穿透连接随页面关闭而休眠。
