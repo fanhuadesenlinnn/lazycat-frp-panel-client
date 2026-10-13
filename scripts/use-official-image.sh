@@ -46,5 +46,4 @@ mv "$tmp" lzc-manifest.yml
 echo "已更新 lzc-manifest.yml: application.image = $REF"
 echo "提醒："
 echo "  1) 更新 package.yml 的包装版本，并重新打包、lint和设备验证；"
-echo "  2) 新 v* 标签发布会复用官方镜像，不重复推送镜像；"
-echo "  3) 商店资料与手动提交步骤见 docs/STORE-SUBMISSION.md。"
+echo "  2) 使用 scripts/build-lpk.sh 生成引用官方镜像的安装包。"

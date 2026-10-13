@@ -2,14 +2,14 @@
 # 构建懒猫应用镜像（Dockerfile.lpk），可选推送到 registry。
 #
 #   scripts/build-image.sh                # 只构建（amdg64/arm64 双架构，不进任何 registry）
-#   scripts/build-image.sh --push         # 构建并推送（CI 发布用）
+#   scripts/build-image.sh --push         # 构建并推送
 #   scripts/build-image.sh --push --tag 0.2.0
 #
 # 镜像名与标签默认取自 lzc-manifest.yml 里 application.image 那一行，
 # 保证 LPK 引用的就是这里推上去的镜像；--repo/--tag 可显式覆盖。
 #
 # 依赖：docker buildx（多架构构建）；content/bin/linux-<arch>/ 已由
-# scripts/build-binaries.sh 或 ci-release.sh 产出。
+# scripts/build-binaries.sh 产出。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,7 +25,7 @@ TAG=""
 usage() {
   cat <<'EOF'
 用法: scripts/build-image.sh [选项]
-  --push                 构建后推送到 registry（CI 发布用；不加则只构建校验）
+  --push                 构建后推送到 registry（不加则只构建校验）
   --repo <name>          覆盖镜像仓库名（默认取 lzc-manifest.yml 的 application.image）
   --tag <tag>            覆盖标签（默认取 lzc-manifest.yml 的 application.image）
   --platforms <list>     目标平台（默认 linux/amd64,linux/arm64）

@@ -6,7 +6,7 @@
 // Windows 的文件系统无法表达 +x，于是 content/start.sh 与 content/bin/** 的可执行位
 // 会在 Windows 上被打成 0644，装到设备上 exec:// 路由会因为脚本不可执行而失败。
 // 这个脚本只做一件事：就地改写 tar 头里的 mode 字段（不改动任何文件内容、不改动
-// 条目顺序与长度），并重算校验和。正式产物请始终用 Linux / GitHub Actions 构建。
+// 条目顺序与长度），并重算校验和。正式产物请使用 Linux 构建。
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
 
 const BLOCK = 512;

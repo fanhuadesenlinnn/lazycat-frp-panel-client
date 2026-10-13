@@ -3,11 +3,9 @@
 # 这里刻意不配置 contentdir：本应用是 image-only 包——管理器、上游客户端与
 # 启动脚本都在 lzc-manifest.yml 的 application.image 指向的镜像里
 # （见 Dockerfile.lpk），LPK 只保存一条镜像引用，所以安装包只有几百 KB。
-# 若在这里加回 contentdir，二进制会被重新打进 LPK（100 MB 级别），
-# scripts/ci-release.sh 的大小检查会直接失败。
+# 若在这里加回 contentdir，二进制会被重新打进 LPK。
 #
-# 也不配置 buildscript：二进制由 scripts/build-binaries.sh / ci-release.sh
-# 显式编译，可用 lzc-cli project deploy 之外的流程复用同一份产物。
+# 也不配置 buildscript：本地镜像构建时用 scripts/build-binaries.sh 编译二进制。
 manifest: ./lzc-manifest.yml
 pkgout: ./dist
 icon: ./icon.png

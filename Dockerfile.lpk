@@ -63,7 +63,7 @@ RUN set -eux; \
     /app/bin/linux-${TARGETARCH}/frp-panel-client version
 
 # 在目标架构实际启动压缩后的管理器，验证解压运行及 HTTP 健康检查。
-# ARM64 的 CI 构建通过 QEMU 执行，不能只凭 ELF 头判断可运行。
+# 在 AMD64 主机上构建 ARM64 镜像时需要配置 QEMU 来执行启动检查。
 RUN set -eu; \
     /app/bin/linux-${TARGETARCH}/lzc-frpp-client \
       --listen=127.0.0.1:18080 --data-dir=/tmp/lzc-smoke --insecure-no-auth & \

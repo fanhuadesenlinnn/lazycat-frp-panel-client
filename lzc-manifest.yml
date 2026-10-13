@@ -23,8 +23,8 @@ usage: |
 
 application:
   # 应用镜像：管理器 + 上游 frp-panel 客户端 + /app/start.sh 都在里面。
-  # 维护者已将镜像转存到官方源。发布流水线复用此引用，只打包 LPK，
-  # 不从外部拉取官方镜像，也不向该仓库推送。更新程序需先转存新镜像再替换引用。
+  # 维护者已将镜像转存到官方源，打包时复用此引用。
+  # 更新程序需先转存新镜像再替换引用。
   image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:716bbc086cce38fa
   subdomain: frpp
   # 后台常驻：即使没有页面在访问，也保持管理器（进而保持 frp-panel 客户端）

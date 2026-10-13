@@ -21,8 +21,7 @@ frp-panel-client 是 AGPL-3.0 授权的自由软件，按原样分发、未做�
 本包内不包含上游仓库的完整源代码，只包含由该源码编译得到的二进制。
 如果你需要完全离线的源码归档：
 
-  * GitHub Actions 的每次构建都会把 `frp-panel-source-<commit>.tar.gz` 与
-    `lazycat-client-source.tar.gz` 作为构建产物（artifact）一并上传，可直接下载；
-  * 或者参考 README 中「可复现构建」一节，用固定 commit 的源码重新编译。
+  * 发布构建产物附带上游与客户端源码归档；
+  * 也可以从上述仓库地址获取固定 commit 的源码。
 
 完整许可证文本请见 https://www.gnu.org/licenses/agpl-3.0.txt
