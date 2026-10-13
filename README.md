@@ -25,14 +25,15 @@ lazycat-client/
 │   ├── upstream/               # 解析上游启动命令 + 生成 argv/env（不经过 shell）
 │   ├── supervisor/             # 子进程生命周期与退避重启
 │   └── web/                    # HTTP API + 内嵌中文前端（assets/）
-├── content/
-│   ├── start.sh                # 懒猫 exec:// 路由的启动入口（架构分派）
-│   ├── bin/linux-<arch>/       # 打包进 LPK 的两个二进制（构建产物，不入库）
+├── content/                    # 应用镜像的构建输入（不再是 LPK 的 contentdir）
+│   ├── start.sh                # 懒猫 exec:// 路由的启动入口（架构分派 + 路径解析）
+│   ├── bin/linux-<arch>/       # 进镜像的两个二进制（构建产物，不入库）
 │   └── licenses/NOTICE.txt     # 上游来源与许可证说明
 ├── lzc-manifest.yml            # 运行结构（route/background_task/环境变量）
 ├── lzc-build.yml               # 正式打包配置
 ├── lzc-build.dev.yml           # 开发态差异（仅覆盖包名）
 ├── package.yml                 # LPK v2 静态元数据
+├── Dockerfile.lpk              # 懒猫应用镜像（推送到镜像服务器，见下）
 ├── Dockerfile                  # 非懒猫环境（Docker）可选部署
 └── scripts/                    # 构建 / 打包 / 图标生成脚本
 ```
@@ -169,7 +170,32 @@ content/bin/linux-arm64/{lzc-frpp-client, frp-panel-client}
 
 ---
 
-## 打包与安装
+## 应用镜像与打包
+
+懒猫微服的习惯是**安装包保持很小，镜像放在镜像服务器上**：`.lpk` 只在
+`lzc-manifest.yml` 的 `application.image` 里保存一条镜像引用，安装/启动时由微服从
+registry 拉取镜像。本仓库就是按这个方式打包的——
+
+```
+lazycat-frp-panel-client-0.2.0.lpk   11 KiB   （只有 manifest.yml / package.yml / icon.png）
+ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:0.2.0   约 25 MB（alpine + 两个二进制）
+```
+
+因此 `lzc-build.yml` **刻意不配置 `contentdir`**（image-only 包不会生成 `content.tar`），
+`content/` 目录现在是**应用镜像的构建输入**，不再是 LPK 的内容目录。
+
+### 构建/推送应用镜像
+
+```bash
+scripts/build-binaries.sh --upstream-dir ../frp-panel   # 生成 content/bin/linux-<arch>/
+scripts/build-image.sh                                  # 只构建校验（amd64+arm64，不推送）
+scripts/build-image.sh --push                           # 构建并推送到 registry
+```
+
+镜像名与标签默认取自 `lzc-manifest.yml` 的 `application.image`（也可以 `--repo/--tag` 覆盖），
+保证"LPK 引用的镜像"和"真正推上去的镜像"永远是同一个。推送后镜像摘要会写入 `dist/IMAGE.txt`。
+
+### 打包与安装
 
 需要 [lzc-cli](https://developer.lazycat.cloud/) ≥ 2.0.0（本项目用 2.0.9 验证）：
 
@@ -183,17 +209,30 @@ lzc-cli lpk info dist/frp-panel-client.lpk
 注意 `lzc-cli project` 子命令默认会优先读取 `lzc-build.dev.yml`，因此打包脚本始终显式
 `-f lzc-build.yml`，避免把开发态包名打进正式产物。
 
-> **Windows 上打包的坑**：`lzc-cli` 用 node-tar 打包 `content/`，tar 头里的 `mode` 直接
-> 取自文件系统，而 Windows 无法表达 `+x`，于是 `content/start.sh` 与 `content/bin/**`
-> 会被打成 `0644`，装到设备后 `exec://` 路由会因为脚本不可执行而失败。
-> 如果只能在 Windows 上打包，请补跑一次：
->
-> ```bash
-> node scripts/fix-lpk-modes.mjs dist/frp-panel-client.lpk --in-place
-> ```
->
-> 它只改写 tar 头里的 `mode` 字段并重算校验和（不动任何文件内容）。**正式产物请始终用
-> Linux / GitHub Actions 构建**，因为那里文件系统本身就有正确的可执行位。
+> **本机没有 docker 也能打包**：LPK 里不含二进制，所以打 LPK 只依赖 `lzc-cli`。
+> 但装到设备上时，微服必须能拉取 `application.image` 指向的镜像——请确认该镜像已推送、
+> 且在微服网络上可达（见下面的「镜像来源」）。
+
+> **想恢复"二进制内嵌在 LPK 里"的老形态**（105 MB，可完全离线安装）：
+> 在 `lzc-build.yml` 里加回 `contentdir: ./content` 即可；`scripts/ci-release.sh` 有体积
+> 上限检查（>5 MiB 直接失败）会拦下这种改动，避免无意中发出大包。老形态下 Windows 打包
+> 需要 `node scripts/fix-lpk-modes.mjs <lpk> --in-place` 补可执行位（该脚本仍保留）。
+
+### 镜像来源（上架商店需要官方源）
+
+`lzc-cli lpk lint` 有一条上架检查：**`application.image` 必须以 `registry.lazycat.cloud`
+开头**（`lzc-cli appstore copy-image` 会把公网镜像转存到官方源，并打印形如
+`registry.lazycat.cloud/<社区用户名>/lazycat-frp-panel-client:<镜像ID>` 的引用）。
+
+```bash
+lzc-cli appstore login
+lzc-cli appstore copy-image ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client:<version>
+scripts/use-official-image.sh registry.lazycat.cloud/<你的社区用户名>/lazycat-frp-panel-client:<打印出的标签>
+```
+
+`scripts/use-official-image.sh` 只改 `lzc-manifest.yml` 里 `application.image` 那一行；
+改完提交、重新打 tag 发布即可。在没做这一步之前，CI 会显式打印这条上架告警并继续，
+（这样包可以安装使用，但还不能提交商店审核）。
 
 安装到设备：
 
@@ -209,8 +248,9 @@ Master 给出的客户端启动命令即可。应用声明了 `application.backg
 
 本仓库的 `.github/workflows/build.yml` 在 push `main` / PR / 手动触发时运行：
 Linux 下先 `go vet` + `go test -race`，再检出固定 commit 的上游源码，交叉编译两个架构的
-两个二进制，用 `lzc-cli` 打包成 `.lpk`，并把 `.lpk`、上下游源码归档与 `SHA256SUMS`
-一起上传为构建产物（artifact，保留 30 天）。
+两个二进制，用 docker buildx 验证 `Dockerfile.lpk` 在 amd64/arm64 上都能构建，最后用
+`lzc-cli` 打包成 `.lpk`，并把 `.lpk`、上下游源码归档与 `SHA256SUMS` 一起上传为构建产物
+（artifact，保留 30 天）。这条流水线**不推送镜像**。
 
 下载方式：
 
@@ -238,10 +278,16 @@ git push origin main --follow-tags
 
 1. 检出该标签对应的代码，跑 `go vet ./...` 与 `go test -race -count=1 ./...`；
 2. 检出固定 commit 的上游源码，交叉编译 amd64 / arm64 两个架构的两个二进制；
-3. `lzc-cli project release` 打包 LPK，兜底修正 `content.tar` 内的可执行位，再跑 `lpk lint`；
-4. 校验 `SHA256SUMS` 与实际文件相符；
-5. 创建 GitHub Release，附件为 `lazycat-frp-panel-client-<version>.lpk`、上游与客户端源码
-   归档、`SHA256SUMS`。
+3. `lzc-cli project release` 打包 image-only 的 LPK（约 11 KiB），并检查体积没有回到
+   100 MB 级别，再跑 `lpk lint`；
+4. 用 docker buildx 构建 amd64/arm64 双架构的应用镜像并推送到 `ghcr.io`，
+   镜像摘要写入 `dist/IMAGE.txt`；
+5. 校验 `SHA256SUMS` 与实际文件相符；
+6. 创建 GitHub Release，附件为 `lazycat-frp-panel-client-<version>.lpk`、上游与客户端源码
+   归档、`SHA256SUMS`、`IMAGE.txt`（记录本次发布引用的镜像与摘要）。
+
+注意第 4 步要求镜像推送成功——LPK 里没有二进制，镜像没推上去这个包就是不可用的，
+所以镜像推送失败会直接中断发布。
 
 防呆与重跑约定：
 
@@ -260,6 +306,9 @@ gh release download v0.2.0 -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/
 [Release v0.1.0](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/releases/tag/v0.1.0)，
 [运行记录 38256147419](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/runs/38256147419)），
 下载后的 `sha256sum -c SHA256SUMS`、`lzc-cli lpk lint` 均已复验通过。
+`v0.1.0` 是**内嵌二进制**的离线包（105 MB）；从 `v0.2.0` 起改为 image-only
+（[Release v0.2.0](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/releases/tag/v0.2.0)，
+LPK 11 KiB + `ghcr.io` 镜像）。如果设备的网络拉不到 `ghcr.io`，可以先装 `v0.1.0` 的离线包。
 
 ---
 
@@ -294,7 +343,7 @@ gh release download v0.2.0 -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/
 ## 许可证与上游来源
 
 - 本应用（管理器 + 网页界面）：**AGPL-3.0**，见 `LICENSE`。
-- 上游 `frp-panel`（含随包分发的 `frp-panel-client` 二进制）：**AGPL-3.0**，
+- 上游 `frp-panel`（含随应用镜像分发的 `frp-panel-client` 二进制）：**AGPL-3.0**，
   源码 <https://github.com/VaalaCat/frp-panel>，固定 commit
   `1a58b856d7de19de8669b7072872986d2fa1604a`，未做任何修改，
   详见 `content/licenses/NOTICE.txt`。
@@ -313,18 +362,33 @@ gh release download v0.2.0 -R fanhuadesenlinnn/lazycat-frp-panel-client -D dist/
 - **GitHub Actions（Linux）**：[`Build application`](
   https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/workflows/build.yml)
   在 push `main` 后执行了 `go vet ./...`、`go test -race -count=1 ./...`、
-  两个架构（amd64/arm64）的交叉编译、`lzc-cli project release` 打包与 `lzc-cli lpk lint`，
-  全部通过；产物 `lazycat-frp-panel-client-0.1.0.lpk`（LPK v2）与上下游源码归档、
-  `SHA256SUMS` 一起上传。示例运行：[run 38251077121](
-  https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/runs/38251077121)。
-- 下载核对：CI 产物中的 `.lpk` 经 `lzc-cli lpk info` / `lpk lint` 校验通过，
-  `content.tar` 内 `start.sh` 与 `bin/**` 的可执行位为 `0755`；两个架构的 ELF 类型与
-  `machine` 字段正确（amd64 `0x3E`、arm64 `0xB7`），文件大小与本机交叉编译一致，
-  `SHA256SUMS` 与实际文件相符。注意 Go 构建并非逐字节可复现，因此 CI 与本机编译出的
+  两个架构（amd64/arm64）的交叉编译、docker buildx 对 `Dockerfile.lpk` 的双架构构建校验、
+  `lzc-cli project release` 打包与 `lzc-cli lpk lint`，全部通过；产物与上下游源码归档、
+  `SHA256SUMS` 一起上传。示例运行：[run 38327982007](
+  https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/runs/38327982007)。
+- **发布流水线（v0.2.0 实跑）**：[run 38328138012](
+  https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/actions/runs/38328138012)
+  推送到 `ghcr.io/fanhuadesenlinnn/lazycat-frp-panel-client` 的镜像为 public、
+  `linux/amd64,linux/arm64` 双架构，标签 `0.2.0` / `latest`，
+  摘要 `sha256:d0fbddd106f00dab1bfbb3d8200deb18bbbf42caa5639f07ae76f9918c15ea2d`
+  （记录在 Release 附件的 `IMAGE.txt` 里）。
+- 下载核对（`v0.2.0` Release 附件）：LPK 11 264 字节（11 KiB），内部只有
+  `manifest.yml` / `package.yml` / `icon.png`（无 `content.tar`、无内嵌镜像），
+  `lzc-cli lpk info` 显示 `lpk_version: v2`、`images: none`，`sha256sum -c SHA256SUMS`
+  三个文件全部相符。
+- `v0.1.0`（内嵌二进制形态，105 MB）的 LPK 曾逐项核对：`content.tar` 内 `start.sh` 与
+  `bin/**` 可执行位为 `0755`，两个架构的 ELF 类型与 `machine` 字段正确
+  （amd64 `0x3E`、arm64 `0xB7`）。注意 Go 构建并非逐字节可复现，CI 与本机编译出的
   二进制哈希通常不同，属预期现象。
+- `lpk lint` 目前会报一条**已知**上架告警：镜像来自 `ghcr.io` 而非
+  `registry.lazycat.cloud`（上架前需 `lzc-cli appstore copy-image` 转存官方源，
+  见「应用镜像与打包 → 镜像来源」）。CI 会显式打印这条告警并继续，其它 lint 结果
+  仍会让构建失败。
 
 **尚未**验证的部分（请以你自己的环境实测为准）：
 
 - 未在懒猫微服设备上实机安装、启动过本应用（没有可用的测试设备）。
 - 未连接真实远端 Master 做过端到端联调；上游客户端的实际穿透效果取决于你的 Master 配置。
+- 未在微服上验证过 `application.image` 的拉取：镜像虽然已公开推送，但"设备能否拉到
+  `ghcr.io`"以及"懒猫应用容器用镜像内 `/app/start.sh` 起来"这两点都还没有实机结果。
 - Docker 镜像只做了 Dockerfile 与运行参数的静态检查，未在容器里实测运行。
