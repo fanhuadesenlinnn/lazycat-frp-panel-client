@@ -64,20 +64,21 @@ async function patchCliPrompt(defaults) {
   }
 }
 
-// 只替换 application.image 那一行，保留 manifest 里的注释与排版。
+// 同步更新 app gateway 与 Host client 的镜像，保留注释与排版。
 function setManifestImage(ref) {
   const lines = fs.readFileSync('lzc-manifest.yml', 'utf8').split(/\r?\n/);
   let patched = 0;
   const out = lines.map((line) => {
-    if (patched === 0 && /^\s*image:/.test(line)) {
-      patched = 1;
+    if (/^\s*image:/.test(line)) {
+      patched += 1;
       return line.replace(/^(\s*)image:.*$/, `$1image: ${ref}`);
     }
     return line;
   });
-  if (patched !== 1) throw new Error('lzc-manifest.yml 中未找到唯一的 image: 行');
+  if (patched !== 2) throw new Error('manifest 必须同时包含 gateway 和 client 两个镜像引用');
   const next = out.join('\n');
-  if (yaml.load(next)?.application?.image !== ref) throw new Error('manifest 镜像引用替换失败');
+  const parsed = yaml.load(next);
+  if (parsed?.application?.image !== ref || parsed?.services?.client?.image !== ref || parsed?.services?.client?.network_mode !== 'host') throw new Error('manifest 镜像或 Host 网络配置无效');
   fs.writeFileSync('lzc-manifest.yml', next);
 }
 
@@ -133,8 +134,8 @@ async function assertLpkReferences(lpkPath, ref) {
     await tar.x({ file: lpkPath, cwd: tmpDir, filter: (entry) => entry === 'manifest.yml' });
     const manifestPath = path.join(tmpDir, 'manifest.yml');
     if (!fs.existsSync(manifestPath)) throw new Error('LPK 内缺少 manifest.yml');
-    const image = yaml.load(fs.readFileSync(manifestPath, 'utf8'))?.application?.image;
-    if (image !== ref) throw new Error(`LPK 内 application.image 不是官方源引用: ${image}`);
+    const manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
+    if (manifest?.application?.image !== ref || manifest?.services?.client?.image !== ref || manifest?.services?.client?.network_mode !== 'host') throw new Error('LPK 内镜像引用或 Host 网络配置不正确');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

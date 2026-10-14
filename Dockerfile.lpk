@@ -78,7 +78,6 @@ RUN set -eu; \
     kill "$pid"; wait "$pid"; trap - EXIT; \
     rm -rf /tmp/lzc-smoke
 
-# 懒猫运行时由 lzcinit 接管应用容器，管理器通过 manifest 里的
-# exec://18080,/app/start.sh 路由启动，因此这里的 CMD 在微服里不会被执行；
-# 保留它只是让镜像可以单独 `docker run` 时有个合理行为。
+# 应用容器通过 exec 路由启动 gateway；Host 后台服务通过 CMD 启动 backend。
+# 角色由 LZCFRPP_ROLE 选择，未指定时保留 standalone 运行方式。
 CMD ["/app/start.sh"]

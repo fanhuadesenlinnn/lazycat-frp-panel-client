@@ -44,11 +44,13 @@ func run() error {
 	fs := flag.NewFlagSet("lzc-frpp-client", flag.ExitOnError)
 	var (
 		listenAddr    = fs.String("listen", envOr("LZCFRPP_LISTEN", "127.0.0.1:18080"), "管理界面监听地址")
+		unixSocket    = fs.String("unix-socket", "", "仅通过数据目录内的私有 Unix Socket 提供管理接口")
+		proxySocket   = fs.String("proxy-socket", "", "仅转发管理界面到此 Unix Socket，不启动客户端或修改配置")
 		dataDir       = fs.String("data-dir", envOr("LZCFRPP_DATA_DIR", defaultDataDir()), "持久化数据目录")
 		clientBin     = fs.String("client-bin", "", "frp-panel 客户端可执行文件路径（默认自动查找）")
 		unsafeNoAuth  = fs.Bool("insecure-no-auth", false, "关闭鉴权（仅限本机调试，必须绑定回环地址）")
 		requireAdmin  = fs.Bool("require-admin", envBool("LZCFRPP_REQUIRE_ADMIN", true), "要求懒猫账号为管理员")
-		trustIngress  = fs.Bool("trust-ingress", envBool("LZCFRPP_TRUST_INGRESS", false), "信任懒猫 ingress 注入的 X-HC-User-ID / X-HC-User-Role 请求头（仅限经懒猫入口访问、且只监听回环地址的部署）")
+		trustIngress  = fs.Bool("trust-ingress", envBool("LZCFRPP_TRUST_INGRESS", false), "信任懒猫 ingress 身份（仅限回环地址或私有 Unix Socket）")
 		allowNonLocal = fs.Bool("allow-non-loopback-listen", false, "允许监听非回环地址（不推荐）")
 		probeInterval = fs.Duration("probe-interval", 30*time.Second, "Master 可达性探测间隔")
 		extraOrigins  = fs.String("extra-origins", envOr("LZCFRPP_EXTRA_ORIGINS", ""), "额外允许的请求来源，逗号分隔")
@@ -62,10 +64,20 @@ func run() error {
 		fmt.Printf("lzc-frpp-client %s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
 		return nil
 	}
+	if *unixSocket != "" && *proxySocket != "" {
+		return errors.New("-unix-socket 与 -proxy-socket 不能同时使用")
+	}
+	if *proxySocket != "" {
+		return runGateway(*listenAddr, *proxySocket)
+	}
 
 	loopback, err := isLoopbackListen(*listenAddr)
 	if err != nil {
 		return err
+	}
+	// A private socket in the application data directory has no TCP listener.
+	if *unixSocket != "" {
+		loopback = true
 	}
 	if !loopback && !*allowNonLocal {
 		return fmt.Errorf("拒绝监听 %s：管理接口不允许暴露到回环地址之外，"+
@@ -139,10 +151,18 @@ func run() error {
 		return err
 	}
 
-	listener, err := net.Listen("tcp", *listenAddr)
-	if err != nil {
-		return fmt.Errorf("无法监听 %s：%w", *listenAddr, err)
+	var listener net.Listener
+	endpoint := *listenAddr
+	if *unixSocket != "" {
+		listener, err = listenPrivateUnix(*unixSocket, *dataDir)
+		endpoint = "unix:" + *unixSocket
+	} else {
+		listener, err = net.Listen("tcp", *listenAddr)
 	}
+	if err != nil {
+		return fmt.Errorf("无法监听 %s：%w", endpoint, err)
+	}
+	defer listener.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,7 +172,7 @@ func run() error {
 	server := newHTTPServer(httpSrv)
 
 	ring.Write([]byte(fmt.Sprintf("INFO lzc-frpp-client %s 已启动，监听 %s，数据目录 %s\n",
-		version, *listenAddr, *dataDir)))
+		version, endpoint, *dataDir)))
 	ring.Write([]byte(fmt.Sprintf("INFO 客户端可执行文件：%s\n", orNone(binPath))))
 	if *unsafeNoAuth {
 		ring.Write([]byte("WARN 已通过 -insecure-no-auth 关闭鉴权，仅可用于本机调试\n"))

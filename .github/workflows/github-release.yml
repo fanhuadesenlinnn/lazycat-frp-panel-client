@@ -78,8 +78,11 @@ jobs:
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: bash scripts/build-image.sh --push --repo "ghcr.io/${GITHUB_REPOSITORY}" --tag "$VERSION" --no-latest
-      - name: Archive sources
+      - name: Verify Host networking and archive sources
+        # Verify the published multi-arch image using the same container roles as LPK.
+        if: success()
         run: |
+          bash scripts/check-host-image.sh "${{ steps.meta.outputs.image }}"
           git archive --format=tar.gz --output="$PWD/dist/lazycat-client-source.tar.gz" HEAD
           git -C .upstream/frp-panel archive --format=tar.gz --output="$PWD/dist/frp-panel-source.tar.gz" HEAD
       - uses: actions/upload-artifact@v4

@@ -48,8 +48,22 @@ if [ -z "${TRUST_INGRESS}" ]; then
   fi
 fi
 
+# The app container only proxies HTTP; the host-network service owns all clients.
+SOCKET="/lzcapp/var/frp-panel-client/manager.sock"
+case "${LZCFRPP_ROLE:-standalone}" in
+  gateway)
+    exec "${BASE}/lzc-frpp-client" --listen=127.0.0.1:18080 --proxy-socket="$SOCKET" "$@"
+    ;;
+  backend)
+    set -- "--unix-socket=$SOCKET" "$@"
+    ;;
+  standalone)
+    set -- --listen=127.0.0.1:18080 "$@"
+    ;;
+  *) echo "未知运行角色" >&2; exit 1 ;;
+esac
+
 exec "${BASE}/lzc-frpp-client" \
-  --listen=127.0.0.1:18080 \
   --data-dir=/lzcapp/var/frp-panel-client \
   --client-bin="${BASE}/frp-panel-client" \
   --require-admin="${LZCFRPP_REQUIRE_ADMIN:-1}" \

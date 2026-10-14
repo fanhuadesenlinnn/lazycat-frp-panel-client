@@ -1,6 +1,6 @@
 package: cloud.lazycat.app.frp-panel-client
-version: 0.3.0
-name: frp-panel 客户端
+version: 0.3.1
+name: frp-panel 客户端管理
 description: 在内网设备上运行 frp-panel client，把本机与局域网服务通过自建 Master 暴露出去；提供中文管理界面，同时管理多个独立面板的连接、客户端进程与日志。
 author: fanhuadesenlinnn
 license: AGPL-3.0
@@ -8,12 +8,12 @@ homepage: https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client
 min_os_version: 1.5.0
 locales:
   zh-CN:
-    name: frp-panel 客户端
-    usage: 请先自行部署远端 frp-panel Master 和 Server，在 Master 的客户端页面创建节点，再将启动命令粘贴到本应用。仅懒猫管理员可管理本应用。支持同时连接多个独立面板，连接配置持久保存；127.0.0.1 指应用容器，访问局域网服务请填写可达的局域网地址。
+    name: frp-panel 客户端管理
+    usage: 请先自行部署远端 frp-panel Master 和 Server，在 Master 的客户端页面创建节点，再将启动命令粘贴到本应用。仅懒猫管理员可管理本应用。支持同时连接多个独立面板，连接配置持久保存；客户端使用 Host 网络，127.0.0.1 指微服宿主机；多个连接的本地监听端口应避免冲突。
     description: 在内网设备上运行 frp-panel client，把本机与局域网服务通过自建 Master 暴露出去；提供中文管理界面，同时管理多个独立面板的连接、客户端进程与日志。
   en-US:
-    name: frp-panel Client
-    usage: Deploy your own remote frp-panel Master and Server first. Create a client in Master and paste its startup command into this app. Only Lazycat administrators can manage the app. Settings persist across restarts. The address 127.0.0.1 refers to the application container; use a reachable LAN address for LAN services.
+    name: frp-panel Client Manager
+    usage: Deploy your own remote frp-panel Master and Server first. Create a client in Master and paste its startup command into this app. Only Lazycat administrators can manage the app. Settings persist across restarts. With host networking, 127.0.0.1 refers to the microserver host. Assign distinct local listening ports to separate connections.
     description: Run the frp-panel client on your LAN device and publish local services through your own master. Ships a Chinese web UI to control the client process and its connection settings.
 permissions:
   required:

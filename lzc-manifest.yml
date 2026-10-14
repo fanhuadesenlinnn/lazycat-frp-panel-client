@@ -1,42 +1,37 @@
-# 运行结构定义。静态元数据（package/version/name/...）在 package.yml。
-#
-# 只有一个容器：application 容器承担全部工作，镜像由 application.image 指定。
-# 管理器与上游 frp-panel 客户端都在该镜像里（见 Dockerfile.lpk），.lpk 只保存
-# 这条镜像引用——安装包因此只有几百 KB，镜像在安装时由微服从镜像服务器拉取。
-# 配置里没有 contentdir：这是 image-only 包，不会生成 content.tar。
-#
-# 容器启动时 lazycat 会执行 exec:// 路由里的脚本（即镜像内 /app/start.sh），
-# 浏览器访问应用域名时，ingress 完成登录鉴权后转发到 127.0.0.1:18080。
-#
-# 管理器只监听回环地址，因此管理端口不会暴露到宿主网络；
-# 也正因为如此，这里没有使用 network_mode: host。
+# The gateway remains in the app container; the backend and all FRP clients use
+# the host network. Management HTTP travels over a private shared Unix Socket.
 usage: |
-  首次使用前，请在 frp-panel 主控（Master）的 WebUI 中进入“客户端”页面，创建一个客户端节点，
-  复制形如 `./frp-panel client -s <密钥> -i <客户端ID> --api-url ... --rpc-url ...` 的启动命令，
-  粘贴到本应用首页的“粘贴上游启动命令”框内即可完成配置。
+  请在远端 Master 创建客户端节点，将启动命令粘贴到本应用。
+  支持同时连接多个独立面板，每个连接分别管理配置、进程和日志。
 
-  说明：
-  - 客户端运行在本应用自己的容器网络命名空间内，访问宿主机的服务请使用宿主机的局域网 IP，
-    而不是 127.0.0.1；访问同一局域网内的其它设备同理。
-  - 第一版不包含 WireGuard 与 Serverless Worker 的管理界面。
-  - 客户端日志中的客户端密钥会被自动脱敏后再展示。
+  本版本的客户端使用 Host 网络：127.0.0.1 指懒猫微服宿主机，
+  可以直接连接宿主机服务；局域网服务仍填写其可达地址。
+  多个连接共享宿主机网络，各自使用的访客端口、Worker 端口与 WireGuard 接口应避免冲突。
+  管理界面通过懒猫入口访问，后台管理接口使用私有 Unix Socket，不监听宿主机 TCP 端口。
 
 application:
-  # 应用镜像：管理器 + 上游 frp-panel 客户端 + /app/start.sh 都在里面。
-  # 维护者已将镜像转存到官方源，打包时复用此引用。
-  # 更新程序需先转存新镜像再替换引用。
   image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:d75d7d520d45e3b0
   subdomain: frpp
-  # 后台常驻：即使没有页面在访问，也保持管理器（进而保持 frp-panel 客户端）
-  # 持续运行，避免穿透连接随页面关闭而休眠。
   background_task: true
   routes:
     - /=exec://18080,/app/start.sh
   environment:
-    # 默认只允许懒猫管理员账号访问管理界面；改为 0 可放开给任意已登录用户。
-    - LZCFRPP_REQUIRE_ADMIN=1
-    # 懒猫部署：管理器只监听容器内的回环地址 127.0.0.1:18080，浏览器的请求必然
-    # 经过 lzc-ingress，因此可以信任 ingress 注入的 X-HC-User-ID / X-HC-User-Role。
-    # 这里显式写死，避免依赖运行时的环境变量猜测；standalone / Docker 部署不会带上
-    # 这一项，管理器的 -allow-non-loopback-listen 也会拒绝与 -trust-ingress 同时使用。
-    - LZCFRPP_TRUST_INGRESS=1
+    - LZCFRPP_ROLE=gateway
+
+services:
+  client:
+    image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:d75d7d520d45e3b0
+    network_mode: host
+    # Share the existing data directory with the app gateway, preserving upgrades.
+    binds:
+      - /lzcapp/var/frp-panel-client:/lzcapp/var/frp-panel-client
+    environment:
+      - LZCFRPP_ROLE=backend
+      - LZCFRPP_REQUIRE_ADMIN=1
+      - LZCFRPP_TRUST_INGRESS=1
+    healthcheck:
+      test: [CMD-SHELL, "test -S /lzcapp/var/frp-panel-client/manager.sock"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 3

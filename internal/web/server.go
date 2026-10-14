@@ -57,7 +57,8 @@ type Options struct {
 	RequireAdmin bool
 	// TrustIngress enables the X-HC-* identity headers. It must only be set
 	// when the process is reachable exclusively through the lazycat ingress
-	// (loopback listener inside the lzcapp network namespace). Standalone
+	// (loopback in the app container, or a private Unix Socket reached through
+	// the app gateway). Standalone
 	// deployments leave it off so that a forged header can not impersonate an
 	// administrator.
 	TrustIngress bool

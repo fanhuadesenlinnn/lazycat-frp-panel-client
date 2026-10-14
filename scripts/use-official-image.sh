@@ -26,10 +26,10 @@ case "$REF" in
     ;;
 esac
 
-# manifest 里只有一个以 image: 开头的键（application.image），改它即可。
+# gateway 与 Host 后台使用同一镜像，必须一起替换。
 count="$(grep -c '^[[:space:]]*image:' lzc-manifest.yml || true)"
-if [ "$count" != "1" ]; then
-  echo "错误: lzc-manifest.yml 里有 $count 处 image: 行，无法自动定位 application.image" >&2
+if [ "$count" != "2" ]; then
+  echo "错误: lzc-manifest.yml 里有 $count 处 image: 行，预期 gateway 与 client 各一个镜像引用" >&2
   exit 1
 fi
 

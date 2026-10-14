@@ -1,4 +1,4 @@
-# 懒猫 frp-panel 客户端
+# frp-panel 客户端管理
 
 基于 [frp-panel](https://github.com/VaalaCat/frp-panel) 的懒猫微服客户端，用于连接自建的远端 Master 和 Server，将微服或局域网中的服务通过 FRP 暴露出去。
 
@@ -6,11 +6,13 @@
 
 使用前，在远端 Master 创建客户端节点，复制启动命令，粘贴到本应用并点击“解析、保存并启动”。
 
-测试版本安装包可从 [GitHub Releases](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/releases) 下载。Intel/AMD 设备选择文件名带 `amd64` 的 `.lpk`，ARM 设备选择 `arm64`。安装包引用对应架构的懒猫仓库镜像，不需要通过应用商店安装。
+安装包可从 [GitHub Releases](https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client/releases) 下载。Intel/AMD 设备选择文件名带 `amd64` 的 `.lpk`，ARM 设备选择 `arm64`。安装包引用对应架构的懒猫仓库镜像，不需要通过应用商店安装。
 
 连接第二个面板时，点击页面顶部的“新增连接”，填写连接名称，再粘贴该面板生成的启动命令。切换顶部的连接选择框即可管理对应连接；已启动的其它连接会继续在后台运行。升级时原有配置保留为“默认连接”，无需重新输入密钥；默认连接不能删除，可停止或修改配置。
 
-每个新增连接使用独立的数据和 Worker 工作目录，删除连接会停止对应进程并移除其连接配置。配置只在当前连接内生效。同一容器内的监听端口仍由各面板下发的 FRP 访客、Worker 或 WireGuard 配置决定，请给需要本地监听的服务分配不同端口。
+每个新增连接使用独立的数据和 Worker 工作目录，删除连接会停止对应进程并移除其连接配置。配置只在当前连接内生效。客户端使用 Host 网络，127.0.0.1 指懒猫微服宿主机。各连接共享宿主机网络；各面板下发的 FRP 访客、Worker 或 WireGuard 配置需要使用不同的本地监听端口及接口名称。
+
+管理页面运行在应用容器内，通过私有 Unix Socket 连接 Host 网络后台服务。后台管理接口不监听宿主机 TCP 端口；配置继续保存在原有的 `/lzcapp/var/frp-panel-client`，升级无需重新录入。
 
 ## 界面介绍
 
