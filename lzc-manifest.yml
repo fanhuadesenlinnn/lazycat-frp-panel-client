@@ -11,7 +11,7 @@ usage: |
 
 application:
   image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:98852721e5dadda2
-  subdomain: frpp
+  subdomain: frppcsm
   background_task: true
   routes:
     - /=exec://18080,/app/start.sh

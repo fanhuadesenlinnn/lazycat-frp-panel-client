@@ -202,7 +202,7 @@ async function preparePackage({ archSuffix = false } = {}) {
   setManifestImage(ref);
   fs.writeFileSync('dist/IMAGE.txt', `image: ${ref}\nsource: ${image}\narch: ${arch}\n`);
   console.log(`Official image (${arch}): ${ref}`);
-  const lpk = `dist/lazycat-frp-panel-client-${pkg.version}${archSuffix ? `-${arch}` : ""}.lpk`;
+  const lpk = `dist/frppcsm-${pkg.version}${archSuffix ? `-${arch}` : ""}.lpk`;
   runCLI(['project', 'release', '-f', 'lzc-build.yml', '-o', lpk]);
   await assertLpkReferences(lpk, ref);
   runCLI(['lpk', 'lint', lpk]);

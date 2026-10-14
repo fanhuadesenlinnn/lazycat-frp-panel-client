@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 LZC_CLI="${LZC_CLI:-lzc-cli}"
-OUT="${1:-$ROOT/dist/frp-panel-client.lpk}"
+OUT="${1:-$ROOT/dist/frppcsm.lpk}"
 
 if ! command -v "$LZC_CLI" >/dev/null 2>&1; then
   echo "未找到 lzc-cli，请先安装：npm i -g @lazycatcloud/lzc-cli" >&2
