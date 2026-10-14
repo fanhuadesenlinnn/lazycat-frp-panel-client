@@ -10,7 +10,7 @@ usage: |
   管理界面通过懒猫入口访问，后台管理接口使用私有 Unix Socket，不监听宿主机 TCP 端口。
 
 application:
-  image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:d75d7d520d45e3b0
+  image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:98852721e5dadda2
   subdomain: frpp
   background_task: true
   routes:
@@ -20,7 +20,7 @@ application:
 
 services:
   client:
-    image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:d75d7d520d45e3b0
+    image: registry.lazycat.cloud/u2982125700/fanhuadesenlinnn/lazycat-frp-panel-client:98852721e5dadda2
     network_mode: host
     # Share the existing data directory with the app gateway, preserving upgrades.
     binds:
