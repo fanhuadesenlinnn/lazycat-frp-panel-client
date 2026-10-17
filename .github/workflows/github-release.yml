@@ -35,8 +35,8 @@ jobs:
           go test -race -count=1 ./...
       - uses: actions/checkout@v4
         with:
-          repository: VaalaCat/frp-panel
-          ref: 1a58b856d7de19de8669b7072872986d2fa1604a
+          repository: fanhuadesenlinnn/frp-panel
+          ref: e0d41f11131d2b773bd5e62fb63f6ff4e5b4bd6a
           path: .upstream/frp-panel
           persist-credentials: false
       - uses: actions/cache@v4
@@ -63,7 +63,7 @@ jobs:
             out="$PWD/content/bin/linux-$arch"
             mkdir -p "$out"
             CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$out/lzc-frpp-client" .
-            (cd .upstream/frp-panel && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -mod=readonly -trimpath -ldflags '-s -w -X github.com/VaalaCat/frp-panel/conf.gitCommit=1a58b856d7de19de8669b7072872986d2fa1604a -X github.com/VaalaCat/frp-panel/conf.gitVersion=1a58b85' -o "$out/frp-panel-client" ./cmd/frppc)
+            (cd .upstream/frp-panel && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -mod=readonly -trimpath -ldflags '-s -w -X github.com/VaalaCat/frp-panel/conf.gitCommit=e0d41f11131d2b773bd5e62fb63f6ff4e5b4bd6a -X github.com/VaalaCat/frp-panel/conf.gitVersion=reliability-e0d41f1' -o "$out/frp-panel-client" ./cmd/frppc)
           done
       - uses: docker/setup-qemu-action@v3
         with:

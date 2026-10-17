@@ -37,7 +37,9 @@ func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 		"last_exit":                 snap.LastExit,
 		"last_error":                snap.LastError,
 	}
+	runtimeStatus := s.runtimeStatus(connectionID(r), snap, now)
 	remote := map[string]any{
+		"runtime":      runtimeStatus,
 		"probe":        rt.probe.Last(),
 		"probe_target": rt.probe.Target(),
 		"claim":        "unknown",

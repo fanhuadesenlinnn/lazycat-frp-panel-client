@@ -213,6 +213,14 @@
       $("identity-chip").textContent = data.runtime.require_admin ? "身份：管理员入口" : "身份：任意登录用户";
     }
 
+    var runtime = (data.remote && data.remote.runtime) || {};
+    var runtimeText = "隧道状态：" + (runtime.message || "等待客户端报告");
+    if (runtime.fresh) {
+      runtimeText += " · RPC " + (runtime.rpc_registered ? "已连接" : "重连中");
+      runtimeText += " · 隧道运行 " + runtime.running + "/" + runtime.total;
+      if (runtime.at) { runtimeText += " · " + fmtClock(runtime.at); }
+    }
+    $("p-runtime").textContent = runtimeText;
     var probe = (data.remote && data.remote.probe) || {};
     $("p-target").textContent = probe.target || "未配置";
     $("p-tcp").textContent = probe.tcp === "ok" ? "连接成功" : probe.tcp === "fail" ? "连接失败" : "未执行";

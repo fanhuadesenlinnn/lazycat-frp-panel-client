@@ -48,7 +48,7 @@ func (s *Server) newManager(id string, logs *logbuf.Ring) *supervisor.Manager {
 		spec := upstream.LaunchSpec{ClientID: cfg.ClientID, Secret: cfg.ClientSecret,
 			APIURL: cfg.APIURL, RPCURL: cfg.RPCURL, LogLevel: cfg.LogLevel,
 			EnableRemoteShell: cfg.EnableRemoteShell, EnableFunctions: cfg.EnableFunctions}
-		env := append(spec.Env(), "CLIENT_WORKER_WORKERD_WORK_DIR="+filepath.Join(absDir, "workerd"), "DEBUG_PROFILER_ENABLED=false")
+		env := append(spec.Env(), "CLIENT_WORKER_WORKERD_WORK_DIR="+filepath.Join(absDir, "workerd"), "DEBUG_PROFILER_ENABLED=false", "FRPP_RUNTIME_STATUS_FILE="+filepath.Join(absDir, "frpp-runtime.json"))
 		return supervisor.Spec{Path: s.opts.ClientBinary, Args: spec.Argv(), Env: env, Dir: absDir}, nil
 	}, supervisor.Options{Sink: logs})
 }
