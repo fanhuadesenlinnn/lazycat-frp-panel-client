@@ -71,7 +71,7 @@ build_upstream_from_source() {
   (
     cd "$UPSTREAM_DIR"
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
-      "$GO_BIN" build -o "$out" ./cmd/frppc
+      "$GO_BIN" build -mod=readonly -trimpath -ldflags "-s -w -X github.com/VaalaCat/frp-panel/conf.gitCommit=$UPSTREAM_COMMIT -X github.com/VaalaCat/frp-panel/conf.gitVersion=$UPSTREAM_TAG" -o "$out" ./cmd/frppc
   )
   chmod 0755 "$out"
 }

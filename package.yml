@@ -1,5 +1,5 @@
 package: cloud.lazycat.app.frppcsm
-version: 0.3.1
+version: 0.3.2
 name: frp-panel 客户端管理
 description: 在内网设备上运行 frp-panel client，把本机与局域网服务通过自建 Master 暴露出去；提供中文管理界面，同时管理多个独立面板的连接、客户端进程与日志。
 author: fanhuadesenlinnn
