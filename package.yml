@@ -6,6 +6,8 @@ author: fanhuadesenlinnn
 license: AGPL-3.0
 homepage: https://github.com/fanhuadesenlinnn/lazycat-frp-panel-client
 min_os_version: 1.5.0
+unsupported_platforms:
+  - tvos
 locales:
   zh-CN:
     name: frp-panel 客户端管理

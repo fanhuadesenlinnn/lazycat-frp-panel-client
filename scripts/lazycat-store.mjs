@@ -131,11 +131,14 @@ async function assertLpkReferences(lpkPath, ref) {
   const tar = requireCLI('tar');
   const tmpDir = fs.mkdtempSync(path.join('dist', '.lpk-check-'));
   try {
-    await tar.x({ file: lpkPath, cwd: tmpDir, filter: (entry) => entry === 'manifest.yml' });
+    await tar.x({ file: lpkPath, cwd: tmpDir, filter: (entry) => entry === 'manifest.yml' || entry === 'package.yml' });
     const manifestPath = path.join(tmpDir, 'manifest.yml');
     if (!fs.existsSync(manifestPath)) throw new Error('LPK 内缺少 manifest.yml');
     const manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
     if (manifest?.application?.image !== ref || manifest?.services?.client?.image !== ref || manifest?.services?.client?.network_mode !== 'host') throw new Error('LPK 内镜像引用或 Host 网络配置不正确');
+    const expectedPackage = yaml.load(fs.readFileSync('package.yml', 'utf8'));
+    const packedPackage = yaml.load(fs.readFileSync(path.join(tmpDir, 'package.yml'), 'utf8'));
+    if (packedPackage?.package !== expectedPackage.package || packedPackage?.version !== expectedPackage.version || JSON.stringify(packedPackage?.unsupported_platforms || []) !== JSON.stringify(expectedPackage.unsupported_platforms || [])) throw new Error('LPK 内应用标识、版本或不支持的平台声明与源码不一致');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
