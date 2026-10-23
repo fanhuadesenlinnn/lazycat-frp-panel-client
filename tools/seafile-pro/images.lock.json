@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "status": "baseline-only-not-installable",
+  "observed_on": "2026-10-24",
+  "seafile_pro_version": "13.0.28",
+  "source_vm": "prod-debian",
+  "source_project": "/root/app/seafile13-pro",
+  "source_is_production": true,
+  "services": {
+    "seafile": {
+      "source_tag_observed": "seafileltd/seafile-pro-mc:13.0-latest",
+      "source_digest": "seafileltd/seafile-pro-mc@sha256:5796f38804942a3adf6fb08d078dc9e0707146d24dc2f546e236aaa36a626272",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "seafile-md-server": {
+      "source_tag_observed": "seafileltd/seafile-md-server:13.0-latest",
+      "source_digest": "seafileltd/seafile-md-server@sha256:50e63a492cf67751bf73f456c9e1c143b1b76c8c8e35301486226e130a3637fb",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "notification-server": {
+      "source_tag_observed": "seafileltd/notification-server:13.0-latest",
+      "source_digest": "seafileltd/notification-server@sha256:1cac4101d0f4527ad08c00b5452ceb05d790db95d6c8ab6bbace82429c1e5217",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "seadoc": {
+      "source_tag_observed": "seafileltd/sdoc-server:2.0-latest",
+      "source_digest": "seafileltd/sdoc-server@sha256:5b1bf5a8bfdb8bc5db957e7faee2220111fd6eff00795eaaf172e2f80bb999a5",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "redis": {
+      "source_tag_observed": "redis:7-alpine",
+      "source_digest": "redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "db": {
+      "source_tag_observed": "mariadb:10.11",
+      "source_digest": "mariadb@sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "onlyoffice": {
+      "source_tag_observed": "onlyoffice/documentserver:8.1.0.1",
+      "source_digest": "onlyoffice/documentserver@sha256:423328ee377374c48a30c2aa416e4afedf621faff068f97966cb9b87a28550bd",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "caddy": {
+      "source_tag_observed": "lucaslorentz/caddy-docker-proxy:2.12-alpine",
+      "source_digest": "lucaslorentz/caddy-docker-proxy@sha256:c0a1707abe5814ed682c43a1182ded7fe3975405b47462c9df48a9f4e3a525d7",
+      "architecture": "amd64",
+      "lazycat_image": null
+    },
+    "seasearch": {
+      "source_tag_observed": "seafileltd/seasearch:1.0-latest",
+      "source_digest": "seafileltd/seasearch@sha256:513a53bbc2fd12890b9d61689befe5a2b58516418feb496d6d697cc30f438d33",
+      "architecture": "amd64",
+      "lazycat_image": null
+    }
+  }
+}
